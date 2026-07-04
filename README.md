@@ -3,7 +3,7 @@
 A retro 8-bit arcade take on Gaga Ball for Android, inspired by NES *Super
 Dodge Ball*. Built with **Godot 4.x** (GDScript), 100% free to play.
 
-## Current status — iteration 1: core physics & movement
+## Current status — iterations 1–2: physics, movement, strike & dash
 
 This iteration lays the physics/movement foundation:
 
@@ -26,6 +26,17 @@ This iteration lays the physics/movement foundation:
 - **Below-the-waist hurtbox** — each character has a `LowerHurtbox` Area2D
   that senses only the ball and emits `ball_contact_below_waist`. The
   elimination rule (later iteration) just listens to that signal.
+- **Strike & Power Slap** — one context-aware button: tap for a slap along
+  `facing`, hold to charge (a wind-up ring fills over the character, movement
+  slows) and release for a Power Slap up to `power_slap_speed`. The strike
+  connects when the ball is inside the `StrikeZone` Area2D; whiffs are
+  harmless. `struck_ball(ball, power)` is the future screenshake/SFX hook.
+- **Dash** — a short burst in the current move direction (or `facing` when
+  standing), with a cooldown. `is_dashing()` is exposed for the future
+  "leap over low balls" rule.
+- **Double-touch tracking** — the ball records `repeat_toucher`, cleared by
+  wall bounces and replaced when someone else touches it. Enforcement
+  (elimination) comes with the rules iteration; the data is already correct.
 
 ### Collision layers
 
@@ -48,14 +59,15 @@ Shared constants live in `Scripts/CollisionLayers.gd`.
 2. Move with **WASD / arrow keys**, or click-drag the left half of the window
    to use the touch joystick (mouse emulates touch in this project). Walk
    into the ball to nudge it; walls block you.
-3. **Space** (`strike`) and **Shift** (`dash`) are mapped but intentionally
-   do nothing yet — next iteration.
+3. **Space** — tap to slap the ball in your facing direction when it's in
+   reach; hold to charge and release for a Power Slap.
+4. **Shift** — dash.
 
 ### On an Android device
 
 Touch a finger down anywhere on the **left half of the screen** to summon the
-floating joystick and move. Strike/dash touch buttons arrive with the strike
-mechanic.
+floating joystick and move. On the right: the big **SLAP** button (tap or
+hold-release to charge) and the **DASH** button above it.
 
 ## Exporting to Android
 
@@ -90,6 +102,7 @@ Scripts/
   Character.gd      # base 8-way movement + facing + hurtbox signal
   PlayerCharacter.gd# input-map-driven Character
   VirtualJoystick.gd# floating touch stick (feeds the move_* actions)
+  TouchActionButton.gd # round SLAP/DASH buttons (feed strike/dash actions)
   CollisionLayers.gd# shared layer constants
   GameState.gd      # autoload stub (campaign unlocks/stats later)
 export_presets.cfg  # Android export preset (no secrets)
@@ -97,9 +110,8 @@ export_presets.cfg  # Android export preset (no secrets)
 
 ## Roadmap (per PRD)
 
-- Strike/slap (tap) + charged Power Slap (hold & release), dash/jump
-- Double-touch rule + below-waist elimination + out-of-bounds
-- Touch strike/dash buttons on the right side (joystick already in)
+- Double-touch rule enforcement + below-waist elimination + out-of-bounds
+- Curved-trajectory Power Slap variants (Super Dodge Ball specials)
 - `AI_Controller.gd` state machine (Easy/Medium/Hard)
 - Friendly Match (4/6/8-player FFA) and the 10-stage **USA Pit Tour** campaign
 - Main menu, settings with "Support the Dev" link

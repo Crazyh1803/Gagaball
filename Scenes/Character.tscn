@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Character.gd" id="1_char"]
 
@@ -7,6 +7,9 @@ radius = 10.0
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_lower"]
 size = Vector2(24, 18)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_strike"]
+radius = 36.0
 
 [node name="Character" type="CharacterBody2D"]
 collision_layer = 4
@@ -24,5 +27,12 @@ collision_mask = 2
 [node name="HurtboxShape" type="CollisionShape2D" parent="LowerHurtbox"]
 position = Vector2(0, -4)
 shape = SubResource("RectangleShape2D_lower")
+
+[node name="StrikeZone" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="StrikeShape" type="CollisionShape2D" parent="StrikeZone"]
+shape = SubResource("CircleShape2D_strike")
 
 [connection signal="body_entered" from="LowerHurtbox" to="." method="_on_lower_hurtbox_body_entered"]

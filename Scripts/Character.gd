@@ -1,37 +1,72 @@
 class_name Character
 extends CharacterBody2D
-## Base class for every pit fighter (player and CPU). Owns the 8-way movement
-## physics once; subclasses only supply a movement direction by overriding
-## get_move_input() — PlayerCharacter reads the input map, and the future
-## AI_Controller returns steering decisions.
+## Base class for every pit fighter (player and CPU). Owns movement, the
+## strike (tap slap / charged power slap), and the dash once; subclasses only
+## supply decisions:
+##   - get_move_input(): movement direction (PlayerCharacter reads the input
+##     map, the future AI_Controller returns steering).
+##   - handle_actions(): when to begin_charge()/release_strike()/start_dash().
 ##
-## Extension points left for later iterations:
-##   - facing: 8-way aim direction the slap mechanic will strike along.
-##   - ball_contact_below_waist: the elimination rule listens to this.
-##   - get_move_input(): the AI override seam.
+## Extension points for later iterations:
+##   - facing: 8-way aim direction every strike travels along.
+##   - ball_contact_below_waist / struck_ball / dashed signals: elimination
+##     rules, screenshake, and SFX subscribe to these.
+##   - is_dashing(): the "leap over low balls" rule reads this later.
 
 ## Emitted when the ball touches this character's lower hurtbox.
 ## The elimination rules (a later iteration) decide what happens.
 signal ball_contact_below_waist(ball: GagaBall)
+## Emitted after a successful slap. power is 0 (tap) .. 1 (full charge).
+signal struck_ball(ball: GagaBall, power: float)
+signal dashed(direction: Vector2)
 
+@export_group("Movement")
 @export var move_speed: float = 230.0
 @export var acceleration: float = 1600.0
 @export var deceleration: float = 2000.0
 ## Impulse applied when walking into the ball, so characters can nudge/dribble
-## it around the pit before the slap mechanic exists.
+## it around the pit.
 @export var push_force: float = 48.0
+
+@export_group("Strike")
+@export var strike_speed: float = 520.0
+@export var power_slap_speed: float = 900.0
+## Seconds of holding for a full-power slap.
+@export var charge_time: float = 0.8
+## Movement speed multiplier while charging (planting your feet to wind up).
+@export var charge_move_penalty: float = 0.45
+
+@export_group("Dash")
+@export var dash_speed: float = 560.0
+@export var dash_duration: float = 0.16
+@export var dash_cooldown: float = 0.7
 
 ## Last non-zero movement direction, snapped to 8 directions.
 var facing := Vector2.DOWN
+## 0..1 while charging a slap, -1 when not charging.
+var charge_ratio := -1.0
+
+var _dash_time_left := 0.0
+var _dash_cooldown_left := 0.0
+var _dash_direction := Vector2.ZERO
+
+@onready var strike_zone: Area2D = $StrikeZone
 
 func _physics_process(delta: float) -> void:
+	handle_actions(delta)
+	_dash_cooldown_left = maxf(_dash_cooldown_left - delta, 0.0)
+
 	var input_dir := get_move_input()
 	if input_dir.length_squared() > 1.0:
 		input_dir = input_dir.normalized()
 
-	var target_velocity := input_dir * move_speed
-	var rate := acceleration if input_dir != Vector2.ZERO else deceleration
-	velocity = velocity.move_toward(target_velocity, rate * delta)
+	if _dash_time_left > 0.0:
+		_dash_time_left -= delta
+		velocity = _dash_direction * dash_speed
+	else:
+		var speed := move_speed * (charge_move_penalty if is_charging() else 1.0)
+		var rate := acceleration if input_dir != Vector2.ZERO else deceleration
+		velocity = velocity.move_toward(input_dir * speed, rate * delta)
 
 	if input_dir != Vector2.ZERO:
 		var new_facing := _snap_to_8_way(input_dir)
@@ -46,6 +81,51 @@ func _physics_process(delta: float) -> void:
 ## Base characters stand still.
 func get_move_input() -> Vector2:
 	return Vector2.ZERO
+
+## Virtual. Called every physics frame before movement; subclasses trigger
+## begin_charge()/release_strike()/start_dash() here.
+func handle_actions(_delta: float) -> void:
+	pass
+
+# --- Strike ---
+
+func is_charging() -> bool:
+	return charge_ratio >= 0.0
+
+func begin_charge() -> void:
+	charge_ratio = 0.0
+	queue_redraw()
+
+func set_charge(ratio: float) -> void:
+	charge_ratio = clampf(ratio, 0.0, 1.0)
+	queue_redraw()
+
+## Release the button: slap the ball if it's in reach. A tap is a plain slap,
+## a full hold is a power slap. Whiffs harmlessly when the ball is away.
+func release_strike() -> void:
+	var power := maxf(charge_ratio, 0.0)
+	charge_ratio = -1.0
+	queue_redraw()
+	for body in strike_zone.get_overlapping_bodies():
+		if body is GagaBall:
+			body.strike(facing, lerpf(strike_speed, power_slap_speed, power), self)
+			struck_ball.emit(body, power)
+
+# --- Dash ---
+
+func start_dash() -> void:
+	if _dash_cooldown_left > 0.0:
+		return
+	var dir := get_move_input()
+	_dash_direction = dir.normalized() if dir != Vector2.ZERO else facing
+	_dash_time_left = dash_duration
+	_dash_cooldown_left = dash_cooldown
+	dashed.emit(_dash_direction)
+
+func is_dashing() -> bool:
+	return _dash_time_left > 0.0
+
+# --- Internals ---
 
 func _push_ball() -> void:
 	for i in get_slide_collision_count():
@@ -68,3 +148,7 @@ func _draw() -> void:
 	draw_rect(Rect2(-11, -34, 22, 38), Color("4a7dc9"))
 	draw_rect(Rect2(-11, -12, 22, 16), Color("31558c"))
 	draw_line(Vector2.ZERO, facing * 20.0, Color.WHITE, 2.0)
+	if is_charging():
+		# Wind-up ring fills clockwise from 12 o'clock as the slap charges.
+		var color := Color("ffd94d").lerp(Color("ff5533"), charge_ratio)
+		draw_arc(Vector2(0, -16), 20.0, -PI / 2.0, -PI / 2.0 + TAU * charge_ratio, 24, color, 3.0)
