@@ -1,7 +1,9 @@
 class_name Arena
 extends Node2D
-## The core gameplay space: builds the octagonal pit at runtime and drops the
-## ball. Eliminations, rounds, scoring, and multi-ball are later iterations.
+## The core gameplay space: builds the octagonal pit at runtime, drops the
+## ball, and referees the round — below-the-waist eliminations, the
+## double-touch rule feedback, and last-one-standing victory. Multi-round
+## matches, scoring, and campaign flow are later iterations (GameState).
 ##
 ## The pit walls are generated in _ready() rather than hand-placed in the
 ## scene, so the octagon math stays reviewable and the pit can be reshaped
@@ -14,21 +16,78 @@ extends Node2D
 ## overlap and the ball can never slip through a joint.
 @export var wall_overlap: float = 8.0
 @export var drop_speed: float = 340.0
+## A ball slower than this is harmless — no eliminations from a dying roll.
+@export var elimination_min_speed: float = 120.0
+@export var round_restart_delay: float = 3.0
 
 @onready var ball: GagaBall = $Ball
+@onready var message_label: Label = $HUD/Message
+
+var _alive: Array[Character] = []
+var _round_over := false
 
 func _ready() -> void:
 	var points := _octagon_points()
 	_build_floor(points)
 	_build_walls(points)
+	for child in get_children():
+		if child is Character:
+			_alive.append(child)
+			child.ball_contact_below_waist.connect(_on_below_waist_hit.bind(child))
+			if child is PlayerCharacter:
+				child.strike_blocked.connect(_on_player_strike_blocked)
 	drop_ball()
+	_flash_message("GAGA!", 1.2)
 
 ## Center drop: ball resets to the middle of the pit with a random opening
-## bounce, with no toucher attributed. Round logic (later) reuses this.
+## bounce, with no toucher attributed.
 func drop_ball() -> void:
 	ball.position = Vector2.ZERO
 	ball.last_touched_by = null
+	ball.repeat_toucher = null
 	ball.linear_velocity = Vector2.from_angle(randf() * TAU) * drop_speed
+
+# --- Refereeing ---
+
+func _on_below_waist_hit(hit_ball: GagaBall, character: Character) -> void:
+	if _round_over or not character.is_alive:
+		return
+	# Your own touch can't eliminate you until the ball hits a wall or
+	# someone else (the same memory the double-touch rule uses).
+	if hit_ball.is_repeat_touch(character):
+		return
+	if hit_ball.linear_velocity.length() < elimination_min_speed:
+		return
+	_eliminate(character)
+
+func _on_player_strike_blocked(_blocked_ball: GagaBall) -> void:
+	_flash_message("DOUBLE!", 0.8)
+
+func _eliminate(character: Character) -> void:
+	character.eliminate()
+	_alive.erase(character)
+	_flash_message("OUT!", 1.0)
+	if character is PlayerCharacter:
+		_end_round("GAME OVER")
+	elif _alive.size() <= 1:
+		_end_round("VICTORY!")
+
+func _end_round(closing_message: String) -> void:
+	if _round_over:
+		return
+	_round_over = true
+	await get_tree().create_timer(1.0).timeout
+	_flash_message(closing_message, round_restart_delay)
+	await get_tree().create_timer(round_restart_delay).timeout
+	get_tree().reload_current_scene()
+
+func _flash_message(text: String, duration: float) -> void:
+	message_label.text = text
+	message_label.visible = true
+	var timer := get_tree().create_timer(duration)
+	timer.timeout.connect(func() -> void:
+		if message_label.text == text:
+			message_label.visible = false)
 
 func _octagon_points() -> PackedVector2Array:
 	var points := PackedVector2Array()

@@ -18,7 +18,11 @@ extends CharacterBody2D
 signal ball_contact_below_waist(ball: GagaBall)
 ## Emitted after a successful slap. power is 0 (tap) .. 1 (full charge).
 signal struck_ball(ball: GagaBall, power: float)
+## Emitted when a slap is refused by the double-touch rule (the ball hasn't
+## hit a wall or another player since this character last touched it).
+signal strike_blocked(ball: GagaBall)
 signal dashed(direction: Vector2)
+signal knocked_out(character: Character)
 
 @export_group("Movement")
 @export var move_speed: float = 230.0
@@ -45,6 +49,7 @@ signal dashed(direction: Vector2)
 var facing := Vector2.DOWN
 ## 0..1 while charging a slap, -1 when not charging.
 var charge_ratio := -1.0
+var is_alive := true
 
 var _dash_time_left := 0.0
 var _dash_cooldown_left := 0.0
@@ -101,13 +106,18 @@ func set_charge(ratio: float) -> void:
 	queue_redraw()
 
 ## Release the button: slap the ball if it's in reach. A tap is a plain slap,
-## a full hold is a power slap. Whiffs harmlessly when the ball is away.
+## a full hold is a power slap. Whiffs harmlessly when the ball is away, and
+## the double-touch rule refuses the slap until the ball hits a wall or
+## another player.
 func release_strike() -> void:
 	var power := maxf(charge_ratio, 0.0)
 	charge_ratio = -1.0
 	queue_redraw()
 	for body in strike_zone.get_overlapping_bodies():
 		if body is GagaBall:
+			if body.is_repeat_touch(self):
+				strike_blocked.emit(body)
+				continue
 			body.strike(facing, lerpf(strike_speed, power_slap_speed, power), self)
 			struck_ball.emit(body, power)
 
@@ -124,6 +134,28 @@ func start_dash() -> void:
 
 func is_dashing() -> bool:
 	return _dash_time_left > 0.0
+
+# --- Elimination ---
+
+## Knock this character out of the round: freeze it, remove it from physics
+## (deferred — this is reached from physics signal callbacks), flash the
+## sprite, and leave a faded ghost so the pit shows who's out.
+func eliminate() -> void:
+	if not is_alive:
+		return
+	is_alive = false
+	charge_ratio = -1.0
+	velocity = Vector2.ZERO
+	set_physics_process(false)
+	set_deferred("collision_layer", 0)
+	set_deferred("collision_mask", 0)
+	$LowerHurtbox.set_deferred("monitoring", false)
+	var tween := create_tween()
+	for i in 4:
+		tween.tween_property(self, "modulate:a", 0.1, 0.07)
+		tween.tween_property(self, "modulate:a", 1.0, 0.07)
+	tween.tween_property(self, "modulate:a", 0.25, 0.15)
+	knocked_out.emit(self)
 
 # --- Internals ---
 

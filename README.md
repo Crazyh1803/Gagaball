@@ -3,7 +3,7 @@
 A retro 8-bit arcade take on Gaga Ball for Android, inspired by NES *Super
 Dodge Ball*. Built with **Godot 4.x** (GDScript), 100% free to play.
 
-## Current status — iterations 1–2: physics, movement, strike & dash
+## Current status — iterations 1–3: physics, movement, strike/dash, rules
 
 This iteration lays the physics/movement foundation:
 
@@ -34,9 +34,19 @@ This iteration lays the physics/movement foundation:
 - **Dash** — a short burst in the current move direction (or `facing` when
   standing), with a cooldown. `is_dashing()` is exposed for the future
   "leap over low balls" rule.
-- **Double-touch tracking** — the ball records `repeat_toucher`, cleared by
-  wall bounces and replaced when someone else touches it. Enforcement
-  (elimination) comes with the rules iteration; the data is already correct.
+- **Double-touch rule** — the ball records `repeat_toucher`, cleared by wall
+  bounces and replaced when someone else touches it. Slapping the ball twice
+  in a row is refused with a "DOUBLE!" flash until it hits a wall or another
+  player.
+- **Eliminations & round flow** — `Arena.gd` referees: a live ball (faster
+  than `elimination_min_speed`) touching a character's lower hurtbox knocks
+  them out — unless they were its `repeat_toucher`, so your own slap can't
+  eliminate you until the ball hits a wall (after which it can: real gaga
+  self-outs work). Eliminated characters flash and remain as faded ghosts.
+  Big retro overlays announce "GAGA!" (drop), "OUT!", and "VICTORY!" /
+  "GAME OVER"; the round restarts a few seconds after it's decided.
+- **Dummy opponents** — three stationary base-class Characters stand in the
+  pit as target practice until `AI_Controller.gd` lands.
 
 ### Collision layers
 
@@ -110,7 +120,7 @@ export_presets.cfg  # Android export preset (no secrets)
 
 ## Roadmap (per PRD)
 
-- Double-touch rule enforcement + below-waist elimination + out-of-bounds
+- Out-of-bounds (needs a ball-height concept, arrives with jump-over-ball)
 - Curved-trajectory Power Slap variants (Super Dodge Ball specials)
 - `AI_Controller.gd` state machine (Easy/Medium/Hard)
 - Friendly Match (4/6/8-player FFA) and the 10-stage **USA Pit Tour** campaign
