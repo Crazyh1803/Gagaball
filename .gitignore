@@ -1,0 +1,10 @@
+# Godot 4 generated files
+.godot/
+
+# Android export artifacts / local export config (may contain keystore paths)
+export_presets.cfg
+android/
+
+# System/editor cruft
+*.tmp
+.DS_Store

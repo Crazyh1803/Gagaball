@@ -1,0 +1,15 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Arena.gd" id="1_arena"]
+[ext_resource type="PackedScene" path="res://Scenes/Ball.tscn" id="2_ball"]
+[ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="3_player"]
+
+[node name="GameArena" type="Node2D"]
+script = ExtResource("1_arena")
+
+[node name="Ball" parent="." instance=ExtResource("2_ball")]
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+position = Vector2(0, 200)
+
+[node name="Camera2D" type="Camera2D" parent="."]

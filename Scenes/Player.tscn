@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://Scenes/Character.tscn" id="1_charscene"]
+[ext_resource type="Script" path="res://Scripts/PlayerCharacter.gd" id="2_player"]
+
+[node name="Player" instance=ExtResource("1_charscene")]
+script = ExtResource("2_player")
