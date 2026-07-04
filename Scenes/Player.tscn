@@ -5,3 +5,4 @@
 
 [node name="Player" instance=ExtResource("1_charscene")]
 script = ExtResource("2_player")
+jersey_color = Color(0.95, 0.72, 0.23, 1)

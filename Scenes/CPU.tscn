@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://Scenes/Character.tscn" id="1_charscene"]
+[ext_resource type="Script" path="res://Scripts/AI_Controller.gd" id="2_ai"]
+
+[node name="CPU" instance=ExtResource("1_charscene")]
+script = ExtResource("2_ai")

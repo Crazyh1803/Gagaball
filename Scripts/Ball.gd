@@ -32,6 +32,7 @@ func is_repeat_touch(character: Character) -> bool:
 	return repeat_toucher == character
 
 func _ready() -> void:
+	add_to_group(&"balls")
 	body_entered.connect(_on_body_entered)
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:

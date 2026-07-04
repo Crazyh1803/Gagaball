@@ -3,7 +3,7 @@
 A retro 8-bit arcade take on Gaga Ball for Android, inspired by NES *Super
 Dodge Ball*. Built with **Godot 4.x** (GDScript), 100% free to play.
 
-## Current status — iterations 1–3: physics, movement, strike/dash, rules
+## Current status — iterations 1–4: physics, movement, strike/dash, rules, AI
 
 This iteration lays the physics/movement foundation:
 
@@ -45,8 +45,13 @@ This iteration lays the physics/movement foundation:
   self-outs work). Eliminated characters flash and remain as faded ghosts.
   Big retro overlays announce "GAGA!" (drop), "OUT!", and "VICTORY!" /
   "GAME OVER"; the round restarts a few seconds after it's decided.
-- **Dummy opponents** — three stationary base-class Characters stand in the
-  pit as target practice until `AI_Controller.gd` lands.
+- **CPU opponents** — `AI_Controller.gd` extends `Character` with a
+  Wander/Chase/Dodge state machine following the PRD difficulty matrix:
+  Easy wanders and only slaps balls that roll into reach; Medium tracks the
+  ball and sidesteps incoming shots; Hard leads the ball's path,
+  dodge-dashes, charges power slaps, and targets the human player. Decision
+  cadence doubles as reaction time (0.35s / 0.2s / 0.1s). The default arena
+  fields the gold-jersey player against two Easy CPUs and one Medium.
 
 ### Collision layers
 
@@ -105,12 +110,14 @@ Scenes/
   GameArena.tscn    # the pit, ball, player, camera
   Ball.tscn         # RigidBody2D gaga ball
   Character.tscn    # base body: movement collider + lower hurtbox
-  Player.tscn       # Character with PlayerCharacter.gd
+  Player.tscn       # Character with PlayerCharacter.gd (gold jersey)
+  CPU.tscn          # Character with AI_Controller.gd
 Scripts/
   Arena.gd          # builds the octagon, drops the ball
   Ball.gd           # elastic physics, touch tracking
   Character.gd      # base 8-way movement + facing + hurtbox signal
   PlayerCharacter.gd# input-map-driven Character
+  AI_Controller.gd  # CPU state machine (Easy/Medium/Hard)
   VirtualJoystick.gd# floating touch stick (feeds the move_* actions)
   TouchActionButton.gd # round SLAP/DASH buttons (feed strike/dash actions)
   CollisionLayers.gd# shared layer constants
@@ -122,7 +129,7 @@ export_presets.cfg  # Android export preset (no secrets)
 
 - Out-of-bounds (needs a ball-height concept, arrives with jump-over-ball)
 - Curved-trajectory Power Slap variants (Super Dodge Ball specials)
-- `AI_Controller.gd` state machine (Easy/Medium/Hard)
+- Boss AI upgrades: wall-bounce prediction, signature shots
 - Friendly Match (4/6/8-player FFA) and the 10-stage **USA Pit Tour** campaign
 - Main menu, settings with "Support the Dev" link
   (https://buymeacoffee.com/appsbydan), retro UI, screenshake & juice

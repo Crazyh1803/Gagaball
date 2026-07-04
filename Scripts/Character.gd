@@ -45,6 +45,11 @@ signal knocked_out(character: Character)
 @export var dash_duration: float = 0.16
 @export var dash_cooldown: float = 0.7
 
+@export_group("Looks")
+## Placeholder body color until pixel art lands; the player wears a different
+## jersey than the CPUs.
+@export var jersey_color := Color("4a7dc9")
+
 ## Last non-zero movement direction, snapped to 8 directions.
 var facing := Vector2.DOWN
 ## 0..1 while charging a slap, -1 when not charging.
@@ -56,6 +61,9 @@ var _dash_cooldown_left := 0.0
 var _dash_direction := Vector2.ZERO
 
 @onready var strike_zone: Area2D = $StrikeZone
+
+func _ready() -> void:
+	add_to_group(&"characters")
 
 func _physics_process(delta: float) -> void:
 	handle_actions(delta)
@@ -177,8 +185,8 @@ func _on_lower_hurtbox_body_entered(body: Node2D) -> void:
 func _draw() -> void:
 	# Placeholder until pixel art lands: torso block, darker "below the waist"
 	# zone matching the LowerHurtbox, and a facing tick for aiming the slap.
-	draw_rect(Rect2(-11, -34, 22, 38), Color("4a7dc9"))
-	draw_rect(Rect2(-11, -12, 22, 16), Color("31558c"))
+	draw_rect(Rect2(-11, -34, 22, 38), jersey_color)
+	draw_rect(Rect2(-11, -12, 22, 16), jersey_color.darkened(0.4))
 	draw_line(Vector2.ZERO, facing * 20.0, Color.WHITE, 2.0)
 	if is_charging():
 		# Wind-up ring fills clockwise from 12 o'clock as the slap charges.
