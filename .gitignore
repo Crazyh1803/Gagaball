@@ -1,9 +1,12 @@
 # Godot 4 generated files
 .godot/
 
-# Android export artifacts / local export config (may contain keystore paths)
-export_presets.cfg
+# Android export artifacts
+build/
 android/
+# Never commit signing keys
+*.keystore
+*.jks
 
 # System/editor cruft
 *.tmp

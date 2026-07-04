@@ -27,6 +27,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 window/handheld/orientation=4
 
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
 [input]
 
 move_left={
@@ -75,4 +79,5 @@ dash={
 
 renderer/rendering_method="mobile"
 textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
 2d/snap/snap_2d_transforms_to_pixel=true

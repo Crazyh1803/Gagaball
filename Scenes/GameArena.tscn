@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Arena.gd" id="1_arena"]
 [ext_resource type="PackedScene" path="res://Scenes/Ball.tscn" id="2_ball"]
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="3_player"]
+[ext_resource type="Script" path="res://Scripts/VirtualJoystick.gd" id="4_joystick"]
 
 [node name="GameArena" type="Node2D"]
 script = ExtResource("1_arena")
@@ -13,3 +14,11 @@ script = ExtResource("1_arena")
 position = Vector2(0, 200)
 
 [node name="Camera2D" type="Camera2D" parent="."]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="VirtualJoystick" type="Control" parent="HUD"]
+anchor_right = 0.5
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("4_joystick")

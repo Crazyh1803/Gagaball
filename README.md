@@ -40,14 +40,38 @@ Shared constants live in `Scripts/CollisionLayers.gd`.
 
 ## How to test
 
+### In the editor (desktop)
+
 1. Open the project in **Godot 4.3+** and press Play — `GameArena.tscn` is
    the main scene. The ball drops at center with a random opening bounce and
    caroms elastically around the pit.
-2. Move with **WASD / arrow keys** (temporary stand-in for the virtual
-   joystick — the joystick will emit the same input actions later). Walk into
-   the ball to nudge it; walls block you.
+2. Move with **WASD / arrow keys**, or click-drag the left half of the window
+   to use the touch joystick (mouse emulates touch in this project). Walk
+   into the ball to nudge it; walls block you.
 3. **Space** (`strike`) and **Shift** (`dash`) are mapped but intentionally
    do nothing yet — next iteration.
+
+### On an Android device
+
+Touch a finger down anywhere on the **left half of the screen** to summon the
+floating joystick and move. Strike/dash touch buttons arrive with the strike
+mechanic.
+
+## Exporting to Android
+
+An `Android` export preset is committed in `export_presets.cfg` (arm64-v8a,
+landscape, immersive mode, package `com.appsbydan.gagapitshowdown`; it
+contains no secrets — keystores stay local and are gitignored).
+
+One-time setup on your machine:
+
+1. In the Godot editor: **Editor → Manage Export Templates → Download**.
+2. Install Android Studio (or just the SDK command-line tools) and a JDK,
+   then point Godot at them in **Editor → Editor Settings → Export → Android**.
+   Godot auto-generates a debug keystore for you.
+3. **Project → Export → Android → Export Project** (or use one-click deploy —
+   the Android icon in the top-right of the editor — with a device connected
+   over USB debugging).
 
 ## Project layout
 
@@ -65,15 +89,17 @@ Scripts/
   Ball.gd           # elastic physics, touch tracking
   Character.gd      # base 8-way movement + facing + hurtbox signal
   PlayerCharacter.gd# input-map-driven Character
+  VirtualJoystick.gd# floating touch stick (feeds the move_* actions)
   CollisionLayers.gd# shared layer constants
   GameState.gd      # autoload stub (campaign unlocks/stats later)
+export_presets.cfg  # Android export preset (no secrets)
 ```
 
 ## Roadmap (per PRD)
 
 - Strike/slap (tap) + charged Power Slap (hold & release), dash/jump
 - Double-touch rule + below-waist elimination + out-of-bounds
-- Virtual joystick + touch buttons (Android)
+- Touch strike/dash buttons on the right side (joystick already in)
 - `AI_Controller.gd` state machine (Easy/Medium/Hard)
 - Friendly Match (4/6/8-player FFA) and the 10-stage **USA Pit Tour** campaign
 - Main menu, settings with "Support the Dev" link
