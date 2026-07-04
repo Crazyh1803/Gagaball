@@ -9,6 +9,10 @@ extends Node2D
 ## scene, so the octagon math stays reviewable and the pit can be reshaped
 ## per campaign stage (radius, wall material) by tweaking exports.
 
+const CPU_SCENE := preload("res://Scenes/CPU.tscn")
+const BALL_SCENE := preload("res://Scenes/Ball.tscn")
+const MENU_SCENE := "res://Scenes/MainMenu.tscn"
+
 @export var pit_radius: float = 300.0
 @export_range(3, 16) var pit_sides: int = 8
 @export var wall_thickness: float = 24.0
@@ -22,22 +26,62 @@ extends Node2D
 
 @onready var ball: GagaBall = $Ball
 @onready var message_label: Label = $HUD/Message
+@onready var camera: Camera2D = $Camera2D
 
 var _alive: Array[Character] = []
 var _round_over := false
+var _initial_count := 0
+var _second_ball_spawned := false
+var _shake_strength := 0.0
 
 func _ready() -> void:
 	var points := _octagon_points()
 	_build_floor(points)
 	_build_walls(points)
-	for child in get_children():
-		if child is Character:
-			_alive.append(child)
-			child.ball_contact_below_waist.connect(_on_below_waist_hit.bind(child))
-			if child is PlayerCharacter:
-				child.strike_blocked.connect(_on_player_strike_blocked)
+	_setup_match()
 	drop_ball()
-	_flash_message("GAGA!", 1.2)
+	var stage_name: String = GameState.match_config["stage_name"]
+	_flash_message(stage_name if stage_name != "" else "GAGA!", 1.6)
+
+## Configure the pit and the roster from GameState.match_config: apply the
+## stage's ball physics and place the player plus one CPU per configured
+## difficulty, evenly spaced around the pit.
+func _setup_match() -> void:
+	var config: Dictionary = GameState.match_config
+	ball.linear_damp = config["ball_damp"]
+	drop_speed = config["drop_speed"]
+
+	var cpus: Array = config["cpus"]
+	_initial_count = cpus.size() + 1
+	var spawn_radius := pit_radius * 0.65
+	var player := $Player as Character
+	player.position = Vector2.from_angle(PI / 2.0) * spawn_radius
+	_register_character(player)
+	for i in cpus.size():
+		var cpu := CPU_SCENE.instantiate() as AIController
+		cpu.difficulty = cpus[i]
+		cpu.position = Vector2.from_angle(
+				PI / 2.0 + TAU * float(i + 1) / _initial_count) * spawn_radius
+		add_child(cpu)
+		_register_character(cpu)
+
+func _register_character(character: Character) -> void:
+	_alive.append(character)
+	character.ball_contact_below_waist.connect(_on_below_waist_hit.bind(character))
+	character.struck_ball.connect(_on_struck_ball)
+	if character is PlayerCharacter:
+		character.strike_blocked.connect(_on_player_strike_blocked)
+
+func _process(delta: float) -> void:
+	# Screenshake: kicked up by power slaps and knockouts, decays fast.
+	if _shake_strength > 0.05:
+		_shake_strength = move_toward(_shake_strength, 0.0, 40.0 * delta)
+		camera.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake_strength
+	elif camera.offset != Vector2.ZERO:
+		camera.offset = Vector2.ZERO
+
+func _add_shake(amount: float) -> void:
+	_shake_strength = maxf(_shake_strength, amount)
 
 ## Center drop: ball resets to the middle of the pit with a random opening
 ## bounce, with no toucher attributed.
@@ -63,23 +107,44 @@ func _on_below_waist_hit(hit_ball: GagaBall, character: Character) -> void:
 func _on_player_strike_blocked(_blocked_ball: GagaBall) -> void:
 	_flash_message("DOUBLE!", 0.8)
 
+func _on_struck_ball(_struck: GagaBall, power: float) -> void:
+	if power > 0.55:
+		_add_shake(6.0 + 10.0 * power)
+
 func _eliminate(character: Character) -> void:
 	character.eliminate()
 	_alive.erase(character)
 	_flash_message("OUT!", 1.0)
+	_add_shake(8.0)
 	if character is PlayerCharacter:
-		_end_round("GAME OVER")
+		_end_round(false)
 	elif _alive.size() <= 1:
-		_end_round("VICTORY!")
+		_end_round(true)
+	elif not _second_ball_spawned \
+			and GameState.match_config.get("double_ball", false) \
+			and _alive.size() * 2 <= _initial_count:
+		# Stage gimmick: a second ball drops halfway through the match.
+		# Deferred — we're inside a physics signal callback here.
+		_second_ball_spawned = true
+		call_deferred("_spawn_second_ball")
 
-func _end_round(closing_message: String) -> void:
+func _spawn_second_ball() -> void:
+	var second := BALL_SCENE.instantiate() as GagaBall
+	second.linear_damp = ball.linear_damp
+	add_child(second)
+	second.position = Vector2.ZERO
+	second.linear_velocity = Vector2.from_angle(randf() * TAU) * drop_speed
+	_flash_message("DOUBLE BALL!", 1.2)
+
+func _end_round(player_won: bool) -> void:
 	if _round_over:
 		return
 	_round_over = true
+	GameState.report_match_result(player_won)
 	await get_tree().create_timer(1.0).timeout
-	_flash_message(closing_message, round_restart_delay)
+	_flash_message("VICTORY!" if player_won else "GAME OVER", round_restart_delay)
 	await get_tree().create_timer(round_restart_delay).timeout
-	get_tree().reload_current_scene()
+	get_tree().change_scene_to_file(MENU_SCENE)
 
 func _flash_message(text: String, duration: float) -> void:
 	message_label.text = text

@@ -29,7 +29,6 @@ var _pit_radius := 300.0
 
 func _ready() -> void:
 	super()
-	_ball = get_tree().get_first_node_in_group(&"balls") as GagaBall
 	var arena := get_parent() as Arena
 	if arena:
 		_pit_radius = arena.pit_radius
@@ -38,12 +37,12 @@ func get_move_input() -> Vector2:
 	return _move_dir
 
 func handle_actions(delta: float) -> void:
-	if _ball == null:
-		return
 	_think_timer -= delta
 	if _think_timer <= 0.0:
 		_think_timer = _think_interval()
 		_think()
+	if _ball == null:
+		return
 	_act_on_ball(delta)
 
 ## Decision cadence doubles as reaction time: easier AI literally thinks
@@ -58,7 +57,11 @@ func _think_interval() -> float:
 			return 0.35
 
 func _think() -> void:
-	if difficulty >= Difficulty.MEDIUM and _ball_threatens_me():
+	# Retarget every think so double-ball stages keep the AI honest.
+	_ball = _nearest_ball()
+	if _ball == null:
+		_state = State.WANDER
+	elif difficulty >= Difficulty.MEDIUM and _ball_threatens_me():
 		_state = State.DODGE
 	elif difficulty >= Difficulty.MEDIUM and not _ball.is_repeat_touch(self):
 		_state = State.CHASE
@@ -106,6 +109,17 @@ func _act_on_ball(delta: float) -> void:
 			_aim()
 			begin_charge()
 			release_strike()
+
+func _nearest_ball() -> GagaBall:
+	var best: GagaBall = null
+	var best_dist := INF
+	for node in get_tree().get_nodes_in_group(&"balls"):
+		var candidate := node as GagaBall
+		var dist := position.distance_squared_to(candidate.position)
+		if dist < best_dist:
+			best_dist = dist
+			best = candidate
+	return best
 
 func _ball_in_reach() -> bool:
 	return strike_zone.get_overlapping_bodies().has(_ball)

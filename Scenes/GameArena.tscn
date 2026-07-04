@@ -1,11 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Arena.gd" id="1_arena"]
 [ext_resource type="PackedScene" path="res://Scenes/Ball.tscn" id="2_ball"]
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="3_player"]
 [ext_resource type="Script" path="res://Scripts/VirtualJoystick.gd" id="4_joystick"]
 [ext_resource type="Script" path="res://Scripts/TouchActionButton.gd" id="5_button"]
-[ext_resource type="PackedScene" path="res://Scenes/CPU.tscn" id="6_cpu"]
 
 [node name="GameArena" type="Node2D"]
 script = ExtResource("1_arena")
@@ -13,17 +12,7 @@ script = ExtResource("1_arena")
 [node name="Ball" parent="." instance=ExtResource("2_ball")]
 
 [node name="Player" parent="." instance=ExtResource("3_player")]
-position = Vector2(0, 200)
-
-[node name="CPU1" parent="." instance=ExtResource("6_cpu")]
-position = Vector2(-190, -70)
-
-[node name="CPU2" parent="." instance=ExtResource("6_cpu")]
-position = Vector2(190, -70)
-
-[node name="CPU3" parent="." instance=ExtResource("6_cpu")]
-position = Vector2(0, -215)
-difficulty = 1
+position = Vector2(0, 195)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 

@@ -3,7 +3,10 @@
 A retro 8-bit arcade take on Gaga Ball for Android, inspired by NES *Super
 Dodge Ball*. Built with **Godot 4.x** (GDScript), 100% free to play.
 
-## Current status — iterations 1–4: physics, movement, strike/dash, rules, AI
+## Current status — iterations 1–5: full game loop
+
+Physics, movement, strike/dash, rules, AI, menus, and the campaign shell are
+all in. What remains is content and polish (pixel art, audio, boss AI).
 
 This iteration lays the physics/movement foundation:
 
@@ -50,8 +53,17 @@ This iteration lays the physics/movement foundation:
   Easy wanders and only slaps balls that roll into reach; Medium tracks the
   ball and sidesteps incoming shots; Hard leads the ball's path,
   dodge-dashes, charges power slaps, and targets the human player. Decision
-  cadence doubles as reaction time (0.35s / 0.2s / 0.1s). The default arena
-  fields the gold-jersey player against two Easy CPUs and one Medium.
+  cadence doubles as reaction time (0.35s / 0.2s / 0.1s).
+- **Menus & campaign shell** — `MainMenu.tscn`: USA Pit Tour stage select
+  (10 stages defined in `GameState.CAMPAIGN_STAGES`, wins unlock the next,
+  progress saved to `user://save.cfg`), Friendly Match setup (4/6/8 players,
+  CPU difficulty), and Settings with the **Support the Dev** link
+  (buymeacoffee.com/appsbydan) opened via the native browser. `Arena.gd`
+  builds each match from `GameState.match_config`: CPU roster spawned in a
+  ring, stage ball physics (dirt-pit drag, steel-pit liveliness), and the
+  Baltimore double-ball gimmick (second ball drops when half the roster is
+  out).
+- **Juice** — screenshake on power slaps and knockouts.
 
 ### Collision layers
 
@@ -68,9 +80,11 @@ Shared constants live in `Scripts/CollisionLayers.gd`.
 
 ### In the editor (desktop)
 
-1. Open the project in **Godot 4.3+** and press Play — `GameArena.tscn` is
-   the main scene. The ball drops at center with a random opening bounce and
-   caroms elastically around the pit.
+1. Open the project in **Godot 4.3+** and press Play — the main menu loads;
+   pick a campaign stage or a friendly match. (Running `GameArena.tscn`
+   directly with F6 also works — it uses a default 4-player setup.) The ball
+   drops at center with a random opening bounce and caroms elastically
+   around the pit.
 2. Move with **WASD / arrow keys**, or click-drag the left half of the window
    to use the touch joystick (mouse emulates touch in this project). Walk
    into the ball to nudge it; walls block you.
@@ -107,29 +121,31 @@ Assets/
   Sprites/          # pixel art (placeholder _draw() graphics for now)
   Audio/            # chiptune + SFX (later)
 Scenes/
-  GameArena.tscn    # the pit, ball, player, camera
+  MainMenu.tscn     # title, campaign select, friendly setup, settings
+  GameArena.tscn    # the pit, ball, player, camera, HUD
   Ball.tscn         # RigidBody2D gaga ball
   Character.tscn    # base body: movement collider + lower hurtbox
   Player.tscn       # Character with PlayerCharacter.gd (gold jersey)
   CPU.tscn          # Character with AI_Controller.gd
 Scripts/
-  Arena.gd          # builds the octagon, drops the ball
+  MainMenu.gd       # menu navigation, stage buttons, support link
+  Arena.gd          # builds the octagon + match from config, referees
   Ball.gd           # elastic physics, touch tracking
-  Character.gd      # base 8-way movement + facing + hurtbox signal
+  Character.gd      # base movement, strike, dash, elimination
   PlayerCharacter.gd# input-map-driven Character
   AI_Controller.gd  # CPU state machine (Easy/Medium/Hard)
   VirtualJoystick.gd# floating touch stick (feeds the move_* actions)
   TouchActionButton.gd # round SLAP/DASH buttons (feed strike/dash actions)
   CollisionLayers.gd# shared layer constants
-  GameState.gd      # autoload stub (campaign unlocks/stats later)
+  GameState.gd      # autoload: campaign data, unlocks, match config
 export_presets.cfg  # Android export preset (no secrets)
 ```
 
 ## Roadmap (per PRD)
 
+- Pixel art sprites (oversized expressive heads) + chiptune audio
+- Retro pixel font ("Press Start 2P") for UI and overlays
 - Out-of-bounds (needs a ball-height concept, arrives with jump-over-ball)
 - Curved-trajectory Power Slap variants (Super Dodge Ball specials)
 - Boss AI upgrades: wall-bounce prediction, signature shots
-- Friendly Match (4/6/8-player FFA) and the 10-stage **USA Pit Tour** campaign
-- Main menu, settings with "Support the Dev" link
-  (https://buymeacoffee.com/appsbydan), retro UI, screenshake & juice
+- Best-of-N match structure and campaign boss characters
