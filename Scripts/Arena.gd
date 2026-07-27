@@ -12,6 +12,13 @@ extends Node2D
 const CPU_SCENE := preload("res://Scenes/CPU.tscn")
 const BALL_SCENE := preload("res://Scenes/Ball.tscn")
 const MENU_SCENE := "res://Scenes/MainMenu.tscn"
+## Jersey palettes handed out to CPUs in order, so opponents stay distinct
+## from each other and from the player's gold.
+const TEAM_SHEETS := [
+	preload("res://Assets/Sprites/character_blue.png"),
+	preload("res://Assets/Sprites/character_red.png"),
+	preload("res://Assets/Sprites/character_green.png"),
+]
 
 @export var pit_radius: float = 300.0
 @export_range(3, 16) var pit_sides: int = 8
@@ -36,7 +43,7 @@ var _shake_strength := 0.0
 
 func _ready() -> void:
 	var points := _octagon_points()
-	_build_floor(points)
+	_build_ground(points)
 	_build_walls(points)
 	_setup_match()
 	drop_ball()
@@ -63,6 +70,7 @@ func _setup_match() -> void:
 		cpu.position = Vector2.from_angle(
 				PI / 2.0 + TAU * float(i + 1) / _initial_count) * spawn_radius
 		add_child(cpu)
+		cpu.set_team_sheet(TEAM_SHEETS[i % TEAM_SHEETS.size()])
 		_register_character(cpu)
 
 func _register_character(character: Character) -> void:
@@ -141,6 +149,9 @@ func _end_round(player_won: bool) -> void:
 		return
 	_round_over = true
 	GameState.report_match_result(player_won)
+	if player_won:
+		for survivor in _alive:
+			survivor.celebrate()
 	await get_tree().create_timer(1.0).timeout
 	_flash_message("VICTORY!" if player_won else "GAME OVER", round_restart_delay)
 	await get_tree().create_timer(round_restart_delay).timeout
@@ -163,12 +174,32 @@ func _octagon_points() -> PackedVector2Array:
 		points.append(Vector2.from_angle(angle) * pit_radius)
 	return points
 
-func _build_floor(points: PackedVector2Array) -> void:
+## Lays down the ground: the stage's surface inside the pit, a different one
+## outside it, and a rim line where the wall meets the floor. Both textures
+## tile (Polygon2D uses vertex positions as UVs when none are supplied).
+func _build_ground(points: PackedVector2Array) -> void:
+	var config: Dictionary = GameState.match_config
+	var reach := pit_radius * 3.0
+
+	var surround := Polygon2D.new()
+	surround.name = "Surround"
+	surround.polygon = PackedVector2Array([
+		Vector2(-reach, -reach), Vector2(reach, -reach),
+		Vector2(reach, reach), Vector2(-reach, reach),
+	])
+	surround.texture = _ground_texture("surround", config["surround"])
+	surround.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	surround.texture_scale = Vector2(0.5, 0.5)  # 32px tiles drawn at 2x, like the sprites
+	surround.z_index = -4
+	add_child(surround)
+
 	var floor_poly := Polygon2D.new()
 	floor_poly.name = "PitFloor"
 	floor_poly.polygon = points
-	floor_poly.color = Color("3a3a4a")
-	floor_poly.z_index = -2
+	floor_poly.texture = _ground_texture("floor", config["floor"])
+	floor_poly.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	floor_poly.texture_scale = Vector2(0.5, 0.5)
+	floor_poly.z_index = -3
 	add_child(floor_poly)
 
 	var outline := Line2D.new()
@@ -176,15 +207,30 @@ func _build_floor(points: PackedVector2Array) -> void:
 	var outline_points := points.duplicate()
 	outline_points.append(points[0])
 	outline.points = outline_points
-	outline.width = 10.0
-	outline.default_color = Color("8a8ab0")
-	outline.z_index = -1
+	outline.width = 6.0
+	outline.default_color = Color(0.06, 0.05, 0.09, 0.65)
+	outline.z_index = -2
 	add_child(outline)
+
+func _ground_texture(kind: String, theme: String) -> Texture2D:
+	var path := "res://Assets/Backgrounds/%s_%s.png" % [kind, theme]
+	return load(path) as Texture2D
+
+## Pit rim colors, keyed by the stage's floor surface.
+const WALL_COLORS := {
+	"wood": Color("7a4f2c"),
+	"dirt": Color("6b543a"),
+	"sand": Color("a98c56"),
+	"blacktop": Color("3f4450"),
+	"steel": Color("8d94a6"),
+	"court": Color("8c5a30"),
+}
 
 func _build_walls(points: PackedVector2Array) -> void:
 	var wall_material := PhysicsMaterial.new()
 	wall_material.bounce = 1.0  # perfectly elastic pit walls
 	wall_material.friction = 0.0
+	var wall_color: Color = WALL_COLORS.get(GameState.match_config["floor"], Color("7a4f2c"))
 
 	for i in points.size():
 		var a := points[i]
@@ -206,4 +252,30 @@ func _build_walls(points: PackedVector2Array) -> void:
 		var collision := CollisionShape2D.new()
 		collision.shape = shape
 		wall.add_child(collision)
+		wall.z_index = -1  # under the players and ball, over the floor
+		_add_wall_visual(wall, shape.size, wall_color)
 		add_child(wall)
+
+## Draws the wall board plus a lit cap on whichever side faces the pit, so
+## the rim reads as a raised barrier rather than a flat stripe.
+func _add_wall_visual(wall: StaticBody2D, size: Vector2, color: Color) -> void:
+	var half := size / 2.0
+	var board := Polygon2D.new()
+	board.polygon = PackedVector2Array([
+		Vector2(-half.x, -half.y), Vector2(half.x, -half.y),
+		Vector2(half.x, half.y), Vector2(-half.x, half.y),
+	])
+	board.color = color
+	wall.add_child(board)
+
+	var inward := (Vector2.ZERO - wall.position).rotated(-wall.rotation)
+	var cap_sign := signf(inward.y)
+	var cap_outer := half.y * cap_sign
+	var cap_inner := cap_outer - 5.0 * cap_sign
+	var cap := Polygon2D.new()
+	cap.polygon = PackedVector2Array([
+		Vector2(-half.x, cap_inner), Vector2(half.x, cap_inner),
+		Vector2(half.x, cap_outer), Vector2(-half.x, cap_outer),
+	])
+	cap.color = color.lightened(0.35)
+	wall.add_child(cap)

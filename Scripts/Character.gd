@@ -46,9 +46,19 @@ signal knocked_out(character: Character)
 @export var dash_cooldown: float = 0.7
 
 @export_group("Looks")
-## Placeholder body color until pixel art lands; the player wears a different
-## jersey than the CPUs.
-@export var jersey_color := Color("4a7dc9")
+## How long the slap frame stays up after a swing.
+@export var slap_frame_time: float = 0.18
+@export var walk_fps: float = 9.0
+
+## Sprite sheet layout (see tools/generate_art.py): 8 columns x 3 rows.
+const ROW_FRONT := 0
+const ROW_SIDE := 1
+const ROW_BACK := 2
+const WALK_COLS := [0, 1, 2, 3]
+const COL_CHARGE := 4
+const COL_SLAP := 5
+const COL_VICTORY := 6
+const COL_OUT := 7
 
 ## Last non-zero movement direction, snapped to 8 directions.
 var facing := Vector2.DOWN
@@ -56,14 +66,28 @@ var facing := Vector2.DOWN
 var charge_ratio := -1.0
 var is_alive := true
 
+var _anim_time := 0.0
+var _slap_timer := 0.0
+var _celebrating := false
+
 var _dash_time_left := 0.0
 var _dash_cooldown_left := 0.0
 var _dash_direction := Vector2.ZERO
 
 @onready var strike_zone: Area2D = $StrikeZone
+@onready var sprite: Sprite2D = $Sprite
 
 func _ready() -> void:
 	add_to_group(&"characters")
+	_update_sprite(0.0)
+
+## Swap in a team's palette (see Assets/Sprites/character_*.png).
+func set_team_sheet(sheet: Texture2D) -> void:
+	($Sprite as Sprite2D).texture = sheet
+
+## Play the victory pose (round won).
+func celebrate() -> void:
+	_celebrating = true
 
 func _physics_process(delta: float) -> void:
 	handle_actions(delta)
@@ -82,13 +106,11 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(input_dir * speed, rate * delta)
 
 	if input_dir != Vector2.ZERO:
-		var new_facing := _snap_to_8_way(input_dir)
-		if new_facing != facing:
-			facing = new_facing
-			queue_redraw()
+		facing = _snap_to_8_way(input_dir)
 
 	move_and_slide()
 	_push_ball()
+	_update_sprite(delta)
 
 ## Virtual. Return the desired movement direction (length <= 1).
 ## Base characters stand still.
@@ -107,11 +129,9 @@ func is_charging() -> bool:
 
 func begin_charge() -> void:
 	charge_ratio = 0.0
-	queue_redraw()
 
 func set_charge(ratio: float) -> void:
 	charge_ratio = clampf(ratio, 0.0, 1.0)
-	queue_redraw()
 
 ## Release the button: slap the ball if it's in reach. A tap is a plain slap,
 ## a full hold is a power slap. Whiffs harmlessly when the ball is away, and
@@ -120,7 +140,7 @@ func set_charge(ratio: float) -> void:
 func release_strike() -> void:
 	var power := maxf(charge_ratio, 0.0)
 	charge_ratio = -1.0
-	queue_redraw()
+	_slap_timer = slap_frame_time  # the swing animates even on a whiff
 	for body in strike_zone.get_overlapping_bodies():
 		if body is GagaBall:
 			if body.is_repeat_touch(self):
@@ -154,6 +174,7 @@ func eliminate() -> void:
 	is_alive = false
 	charge_ratio = -1.0
 	velocity = Vector2.ZERO
+	sprite.frame = _facing_row() * 8 + COL_OUT
 	set_physics_process(false)
 	set_deferred("collision_layer", 0)
 	set_deferred("collision_mask", 0)
@@ -178,17 +199,34 @@ func _push_ball() -> void:
 func _snap_to_8_way(direction: Vector2) -> Vector2:
 	return Vector2.from_angle(snappedf(direction.angle(), TAU / 8.0))
 
+## Which sheet row the current facing uses. Diagonals favor the side view,
+## which reads better in motion than a front sprite sliding sideways.
+func _facing_row() -> int:
+	if absf(facing.x) > absf(facing.y):
+		return ROW_SIDE
+	return ROW_BACK if facing.y < 0.0 else ROW_FRONT
+
+func _update_sprite(delta: float) -> void:
+	var row := _facing_row()
+	sprite.flip_h = row == ROW_SIDE and facing.x < 0.0
+
+	var col: int = WALK_COLS[0]
+	if _celebrating:
+		col = COL_VICTORY
+	elif _slap_timer > 0.0:
+		_slap_timer -= delta
+		col = COL_SLAP
+	elif is_charging():
+		col = COL_CHARGE
+	elif velocity.length() > 12.0:
+		# Cycle faster when running faster, so dashes look urgent.
+		_anim_time += delta * maxf(velocity.length() / move_speed, 0.5)
+		col = WALK_COLS[int(_anim_time * walk_fps) % WALK_COLS.size()]
+	else:
+		_anim_time = 0.0
+
+	sprite.frame = row * 8 + col
+
 func _on_lower_hurtbox_body_entered(body: Node2D) -> void:
 	if body is GagaBall:
 		ball_contact_below_waist.emit(body)
-
-func _draw() -> void:
-	# Placeholder until pixel art lands: torso block, darker "below the waist"
-	# zone matching the LowerHurtbox, and a facing tick for aiming the slap.
-	draw_rect(Rect2(-11, -34, 22, 38), jersey_color)
-	draw_rect(Rect2(-11, -12, 22, 16), jersey_color.darkened(0.4))
-	draw_line(Vector2.ZERO, facing * 20.0, Color.WHITE, 2.0)
-	if is_charging():
-		# Wind-up ring fills clockwise from 12 o'clock as the slap charges.
-		var color := Color("ffd94d").lerp(Color("ff5533"), charge_ratio)
-		draw_arc(Vector2(0, -16), 20.0, -PI / 2.0, -PI / 2.0 + TAU * charge_ratio, 24, color, 3.0)

@@ -8,6 +8,10 @@ android/
 *.keystore
 *.jks
 
+# Python tooling
+__pycache__/
+*.pyc
+
 # System/editor cruft
 *.tmp
 .DS_Store

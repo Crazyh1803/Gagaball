@@ -1,13 +1,14 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Ball.gd" id="1_ball"]
+[ext_resource type="Texture2D" path="res://Assets/Sprites/ball.png" id="2_balltex"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_ball"]
 friction = 0.0
 bounce = 1.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_ball"]
-radius = 12.0
+radius = 14.0
 
 [node name="Ball" type="RigidBody2D"]
 collision_layer = 2
@@ -20,6 +21,11 @@ contact_monitor = true
 max_contacts_reported = 8
 linear_damp = 0.35
 script = ExtResource("1_ball")
+
+[node name="BallSprite" type="Sprite2D" parent="."]
+texture_filter = 1
+scale = Vector2(2, 2)
+texture = ExtResource("2_balltex")
 
 [node name="BallShape" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_ball")

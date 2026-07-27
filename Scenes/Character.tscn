@@ -1,21 +1,30 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Character.gd" id="1_char"]
+[ext_resource type="Texture2D" path="res://Assets/Sprites/character_blue.png" id="2_sheet"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 10.0
+radius = 16.0
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_lower"]
-size = Vector2(24, 18)
+size = Vector2(36, 20)
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_strike"]
-radius = 36.0
+radius = 56.0
 
 [node name="Character" type="CharacterBody2D"]
 collision_layer = 4
 collision_mask = 7
 motion_mode = 1
 script = ExtResource("1_char")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture_filter = 1
+position = Vector2(0, -32)
+scale = Vector2(2, 2)
+texture = ExtResource("2_sheet")
+hframes = 8
+vframes = 3
 
 [node name="BodyShape" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
@@ -25,7 +34,6 @@ collision_layer = 8
 collision_mask = 2
 
 [node name="HurtboxShape" type="CollisionShape2D" parent="LowerHurtbox"]
-position = Vector2(0, -4)
 shape = SubResource("RectangleShape2D_lower")
 
 [node name="StrikeZone" type="Area2D" parent="."]

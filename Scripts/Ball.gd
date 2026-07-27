@@ -15,8 +15,6 @@ signal wall_bounced
 ## Emitted when the ball comes into physical contact with a character.
 signal character_touched(character: Character)
 
-const RADIUS := 12.0
-
 @export var max_speed: float = 900.0
 
 ## The character that last struck or bumped the ball. null after a fresh drop.
@@ -56,8 +54,3 @@ func _on_body_entered(body: Node) -> void:
 		# Pit walls are the only static bodies in the ball's collision mask.
 		repeat_toucher = null
 		wall_bounced.emit()
-
-func _draw() -> void:
-	# Placeholder until pixel art lands.
-	draw_circle(Vector2.ZERO, RADIUS, Color("f2a33c"))
-	draw_circle(Vector2(-RADIUS * 0.3, -RADIUS * 0.3), RADIUS * 0.35, Color("ffd9a0"))
