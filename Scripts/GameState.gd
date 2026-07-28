@@ -58,8 +58,32 @@ var match_config := {
 	"surround": "gym",
 }
 
+## Actions the game expects. project.godot defines these too; this is a
+## safety net so a Godot version upgrade that rewrites the input map can't
+## leave the game unplayable. Keyboard only -- the touch controls press these
+## same actions from code.
+const DEFAULT_ACTIONS := {
+	"move_left": [KEY_A, KEY_LEFT],
+	"move_right": [KEY_D, KEY_RIGHT],
+	"move_up": [KEY_W, KEY_UP],
+	"move_down": [KEY_S, KEY_DOWN],
+	"strike": [KEY_SPACE],
+	"dash": [KEY_SHIFT],
+}
+
 func _ready() -> void:
+	_ensure_input_actions()
 	_load_progress()
+
+func _ensure_input_actions() -> void:
+	for action in DEFAULT_ACTIONS:
+		if InputMap.has_action(action):
+			continue
+		InputMap.add_action(action)
+		for key in DEFAULT_ACTIONS[action]:
+			var event := InputEventKey.new()
+			event.physical_keycode = key
+			InputMap.action_add_event(action, event)
 
 func start_campaign_stage(index: int) -> void:
 	var stage: Dictionary = CAMPAIGN_STAGES[index]

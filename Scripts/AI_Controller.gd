@@ -29,9 +29,13 @@ var _pit_radius := 300.0
 
 func _ready() -> void:
 	super()
-	var arena := get_parent() as Arena
-	if arena:
-		_pit_radius = arena.pit_radius
+	# Read the pit size without naming the Arena type: Arena loads this scene,
+	# so a type reference back to it would be a cyclic dependency.
+	var arena := get_parent()
+	if arena != null:
+		var radius = arena.get("pit_radius")  # null when the parent isn't an Arena
+		if radius != null:
+			_pit_radius = radius
 
 func get_move_input() -> Vector2:
 	return _move_dir

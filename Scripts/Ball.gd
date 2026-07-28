@@ -13,20 +13,22 @@ extends RigidBody2D
 ## listens to this: a wall contact re-legalizes a strike by the last toucher.
 signal wall_bounced
 ## Emitted when the ball comes into physical contact with a character.
-signal character_touched(character: Character)
+## Typed as Node, not Character: Character.gd refers to GagaBall, so naming
+## Character here would make the two scripts a cyclic reference.
+signal character_touched(character: Node)
 
 @export var max_speed: float = 900.0
 
 ## The character that last struck or bumped the ball. null after a fresh drop.
 ## Persists across wall bounces so eliminations can be attributed.
-var last_touched_by: Character = null
+var last_touched_by: Node = null
 ## The character whose *next* touch would break the double-touch rule.
 ## Cleared by a wall bounce, replaced when a different character touches the
 ## ball. Enforcement (elimination) is a later iteration; the game only tracks
 ## it here.
-var repeat_toucher: Character = null
+var repeat_toucher: Node = null
 
-func is_repeat_touch(character: Character) -> bool:
+func is_repeat_touch(character: Node) -> bool:
 	return repeat_toucher == character
 
 func _ready() -> void:
@@ -40,13 +42,13 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		state.linear_velocity = state.linear_velocity.limit_length(max_speed)
 
 ## Send the ball flying from a slap or power slap.
-func strike(direction: Vector2, speed: float, striker: Character) -> void:
+func strike(direction: Vector2, speed: float, striker: Node) -> void:
 	last_touched_by = striker
 	repeat_toucher = striker
 	linear_velocity = direction.normalized() * minf(speed, max_speed)
 
 func _on_body_entered(body: Node) -> void:
-	if body is Character:
+	if body.is_in_group(&"characters"):
 		last_touched_by = body
 		repeat_toucher = body
 		character_touched.emit(body)

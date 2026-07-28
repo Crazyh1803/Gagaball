@@ -9,15 +9,19 @@ extends Node2D
 ## scene, so the octagon math stays reviewable and the pit can be reshaped
 ## per campaign stage (radius, wall material) by tweaking exports.
 
-const CPU_SCENE := preload("res://Scenes/CPU.tscn")
-const BALL_SCENE := preload("res://Scenes/Ball.tscn")
+## Loaded at runtime rather than preloaded: preload() resolves while this
+## script is still parsing, which would make CPU.tscn -> AI_Controller.gd ->
+## Arena a cyclic reference, and would also fail on a fresh clone where the
+## textures have not been imported yet.
+const CPU_SCENE := "res://Scenes/CPU.tscn"
+const BALL_SCENE := "res://Scenes/Ball.tscn"
 const MENU_SCENE := "res://Scenes/MainMenu.tscn"
 ## Jersey palettes handed out to CPUs in order, so opponents stay distinct
 ## from each other and from the player's gold.
 const TEAM_SHEETS := [
-	preload("res://Assets/Sprites/character_blue.png"),
-	preload("res://Assets/Sprites/character_red.png"),
-	preload("res://Assets/Sprites/character_green.png"),
+	"res://Assets/Sprites/character_blue.png",
+	"res://Assets/Sprites/character_red.png",
+	"res://Assets/Sprites/character_green.png",
 ]
 
 @export var pit_radius: float = 300.0
@@ -64,13 +68,14 @@ func _setup_match() -> void:
 	var player := $Player as Character
 	player.position = Vector2.from_angle(PI / 2.0) * spawn_radius
 	_register_character(player)
+	var cpu_scene := load(CPU_SCENE) as PackedScene
 	for i in cpus.size():
-		var cpu := CPU_SCENE.instantiate() as AIController
+		var cpu := cpu_scene.instantiate() as AIController
 		cpu.difficulty = cpus[i]
 		cpu.position = Vector2.from_angle(
 				PI / 2.0 + TAU * float(i + 1) / _initial_count) * spawn_radius
 		add_child(cpu)
-		cpu.set_team_sheet(TEAM_SHEETS[i % TEAM_SHEETS.size()])
+		cpu.set_team_sheet(load(TEAM_SHEETS[i % TEAM_SHEETS.size()]) as Texture2D)
 		_register_character(cpu)
 
 func _register_character(character: Character) -> void:
@@ -137,7 +142,7 @@ func _eliminate(character: Character) -> void:
 		call_deferred("_spawn_second_ball")
 
 func _spawn_second_ball() -> void:
-	var second := BALL_SCENE.instantiate() as GagaBall
+	var second := (load(BALL_SCENE) as PackedScene).instantiate() as GagaBall
 	second.linear_damp = ball.linear_damp
 	add_child(second)
 	second.position = Vector2.ZERO
