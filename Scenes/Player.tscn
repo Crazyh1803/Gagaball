@@ -6,6 +6,7 @@
 
 [node name="Player" instance=ExtResource("1_charscene")]
 script = ExtResource("2_player")
+display_name = "YOU"
 
 [node name="Sprite" parent="." index="0"]
 texture = ExtResource("3_goldsheet")

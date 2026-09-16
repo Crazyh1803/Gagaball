@@ -4,17 +4,14 @@ extends CharacterBody2D
 ## strike (tap slap / charged power slap), and the dash once; subclasses only
 ## supply decisions:
 ##   - get_move_input(): movement direction (PlayerCharacter reads the input
-##     map, the future AI_Controller returns steering).
+##     map, AI_Controller returns steering).
 ##   - handle_actions(): when to begin_charge()/release_strike()/start_dash().
 ##
-## Extension points for later iterations:
-##   - facing: 8-way aim direction every strike travels along.
-##   - ball_contact_below_waist / struck_ball / dashed signals: elimination
-##     rules, screenshake, and SFX subscribe to these.
-##   - is_dashing(): the "leap over low balls" rule reads this later.
+## facing is the outgoing aim direction. Arena referees swept feet hits
+## and reads is_dashing() for evasion; strike signals drive feedback.
 
 ## Emitted when the ball touches this character's lower hurtbox.
-## The elimination rules (a later iteration) decide what happens.
+## Legacy sensor hook. Arena's authoritative hit checks use swept paths.
 signal ball_contact_below_waist(ball: GagaBall)
 ## Emitted after a successful slap. power is 0 (tap) .. 1 (full charge).
 signal struck_ball(ball: GagaBall, power: float)
@@ -28,10 +25,6 @@ signal knocked_out(character: Character)
 @export var move_speed: float = 230.0
 @export var acceleration: float = 1600.0
 @export var deceleration: float = 2000.0
-## Impulse applied when walking into the ball, so characters can nudge/dribble
-## it around the pit.
-@export var push_force: float = 48.0
-
 @export_group("Strike")
 @export var strike_speed: float = 520.0
 @export var power_slap_speed: float = 900.0
@@ -39,6 +32,9 @@ signal knocked_out(character: Character)
 @export var charge_time: float = 0.8
 ## Movement speed multiplier while charging (planting your feet to wind up).
 @export var charge_move_penalty: float = 0.45
+@export var strike_reach: float = 70.0
+@export var strike_window: float = 0.16
+@export var strike_cooldown: float = 0.28
 
 @export_group("Dash")
 @export var dash_speed: float = 560.0
@@ -46,6 +42,7 @@ signal knocked_out(character: Character)
 @export var dash_cooldown: float = 0.7
 
 @export_group("Looks")
+@export var display_name := "FIGHTER"
 ## How long the slap frame stays up after a swing.
 @export var slap_frame_time: float = 0.18
 @export var walk_fps: float = 9.0
@@ -60,7 +57,7 @@ const COL_SLAP := 5
 const COL_VICTORY := 6
 const COL_OUT := 7
 
-## Last non-zero movement direction, snapped to 8 directions.
+## Aim direction: movement, mouse pointer, or a CPU's selected shot.
 var facing := Vector2.DOWN
 ## 0..1 while charging a slap, -1 when not charging.
 var charge_ratio := -1.0
@@ -69,6 +66,10 @@ var is_alive := true
 var _anim_time := 0.0
 var _slap_timer := 0.0
 var _celebrating := false
+var _strike_time_left := 0.0
+var _strike_cooldown_left := 0.0
+var _swing_power := 0.0
+var _swing_direction := Vector2.DOWN
 
 var _dash_time_left := 0.0
 var _dash_cooldown_left := 0.0
@@ -81,21 +82,29 @@ func _ready() -> void:
 	add_to_group(&"characters")
 	_update_sprite(0.0)
 
-## Swap in a team's palette (see Assets/Sprites/character_*.png).
-func set_team_sheet(sheet: Texture2D) -> void:
+## Swap in an individual fighter palette (colors do not indicate teams).
+func set_fighter_sheet(sheet: Texture2D) -> void:
 	($Sprite as Sprite2D).texture = sheet
+
+## Kept for scenes/tools created before the free-for-all terminology pass.
+func set_team_sheet(sheet: Texture2D) -> void:
+	set_fighter_sheet(sheet)
 
 ## Play the victory pose (round won).
 func celebrate() -> void:
 	_celebrating = true
+	_update_sprite(0.0)
+	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	var input_dir := get_move_input().limit_length(1.0)
+	facing = get_aim_direction(input_dir)
 	handle_actions(delta)
 	_dash_cooldown_left = maxf(_dash_cooldown_left - delta, 0.0)
-
-	var input_dir := get_move_input()
-	if input_dir.length_squared() > 1.0:
-		input_dir = input_dir.normalized()
+	_strike_cooldown_left = maxf(_strike_cooldown_left - delta, 0.0)
+	if _strike_time_left > 0.0:
+		_try_connect_strike()
+		_strike_time_left = maxf(_strike_time_left - delta, 0.0)
 
 	if _dash_time_left > 0.0:
 		_dash_time_left -= delta
@@ -105,12 +114,33 @@ func _physics_process(delta: float) -> void:
 		var rate := acceleration if input_dir != Vector2.ZERO else deceleration
 		velocity = velocity.move_toward(input_dir * speed, rate * delta)
 
-	if input_dir != Vector2.ZERO:
-		facing = _snap_to_8_way(input_dir)
-
 	move_and_slide()
-	_push_ball()
 	_update_sprite(delta)
+	queue_redraw()
+
+func get_aim_direction(input_dir: Vector2) -> Vector2:
+	return input_dir.normalized() if input_dir != Vector2.ZERO else facing
+
+func dash_ready_ratio() -> float:
+	return 1.0 - _dash_cooldown_left / dash_cooldown
+
+func _draw() -> void:
+	if not is_alive:
+		return
+	var tint := Color("ffd777") if self is PlayerCharacter else Color("8ab8de")
+	draw_circle(Vector2(0, -1), 20.0, Color(0.02, 0.04, 0.07, 0.3))
+	if self is PlayerCharacter:
+		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU * dash_ready_ratio(), 40, tint, 2.0)
+		var tip := facing * 43.0
+		draw_line(facing * 26.0, tip, tint, 3.0)
+		draw_line(tip, tip - facing.rotated(0.5) * 10.0, tint, 3.0)
+		draw_line(tip, tip - facing.rotated(-0.5) * 10.0, tint, 3.0)
+	if is_charging():
+		draw_arc(Vector2(0, -60), 16.0, -PI / 2.0,
+				-PI / 2.0 + TAU * maxf(charge_ratio, 0.01), 40, tint, 4.0)
+	if _slap_timer > 0.0:
+		draw_arc(Vector2.ZERO, strike_reach, _swing_direction.angle() - 1.3,
+				_swing_direction.angle() + 1.3, 24, Color(tint, 0.7), 4.0)
 
 ## Virtual. Return the desired movement direction (length <= 1).
 ## Base characters stand still.
@@ -128,6 +158,8 @@ func is_charging() -> bool:
 	return charge_ratio >= 0.0
 
 func begin_charge() -> void:
+	if not is_alive or is_charging() or _strike_cooldown_left > 0.0:
+		return
 	charge_ratio = 0.0
 
 func set_charge(ratio: float) -> void:
@@ -138,21 +170,47 @@ func set_charge(ratio: float) -> void:
 ## the double-touch rule refuses the slap until the ball hits a wall or
 ## another player.
 func release_strike() -> void:
-	var power := maxf(charge_ratio, 0.0)
+	if not is_alive or not is_charging():
+		return
+	_swing_power = maxf(charge_ratio, 0.0)
 	charge_ratio = -1.0
-	_slap_timer = slap_frame_time  # the swing animates even on a whiff
-	for body in strike_zone.get_overlapping_bodies():
-		if body is GagaBall:
-			if body.is_repeat_touch(self):
-				strike_blocked.emit(body)
-				continue
-			body.strike(facing, lerpf(strike_speed, power_slap_speed, power), self)
-			struck_ball.emit(body, power)
+	_swing_direction = facing
+	_slap_timer = slap_frame_time
+	_strike_time_left = strike_window
+	_strike_cooldown_left = strike_cooldown
+	_try_connect_strike()
+
+func can_reach_ball(target: GagaBall) -> bool:
+	return global_position.distance_to(target.global_position) <= strike_reach
+
+func _try_connect_strike() -> void:
+	var candidate: GagaBall = null
+	var blocked: GagaBall = null
+	var closest := INF
+	for node in get_tree().get_nodes_in_group(&"balls"):
+		var target := node as GagaBall
+		var distance := global_position.distance_to(target.global_position)
+		if distance > strike_reach:
+			continue
+		if target.is_repeat_touch(self):
+			blocked = target
+			continue
+		if distance < closest:
+			candidate = target
+			closest = distance
+	if candidate == null and blocked == null:
+		return
+	_strike_time_left = 0.0
+	if candidate == null:
+		strike_blocked.emit(blocked)
+		return
+	candidate.strike(_swing_direction, lerpf(strike_speed, power_slap_speed, _swing_power), self)
+	struck_ball.emit(candidate, _swing_power)
 
 # --- Dash ---
 
 func start_dash() -> void:
-	if _dash_cooldown_left > 0.0:
+	if not is_alive or _dash_cooldown_left > 0.0:
 		return
 	var dir := get_move_input()
 	_dash_direction = dir.normalized() if dir != Vector2.ZERO else facing
@@ -172,6 +230,7 @@ func eliminate() -> void:
 	if not is_alive:
 		return
 	is_alive = false
+	queue_redraw()
 	charge_ratio = -1.0
 	velocity = Vector2.ZERO
 	sprite.frame = _facing_row() * 8 + COL_OUT
@@ -187,14 +246,6 @@ func eliminate() -> void:
 	knocked_out.emit(self)
 
 # --- Internals ---
-
-func _push_ball() -> void:
-	for i in get_slide_collision_count():
-		var collision := get_slide_collision(i)
-		var collider := collision.get_collider()
-		if collider is GagaBall:
-			collider.last_touched_by = self
-			collider.apply_central_impulse(-collision.get_normal() * push_force)
 
 func _snap_to_8_way(direction: Vector2) -> Vector2:
 	return Vector2.from_angle(snappedf(direction.angle(), TAU / 8.0))

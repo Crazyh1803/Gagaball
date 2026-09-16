@@ -12,11 +12,12 @@ config_version=5
 
 config/name="Gaga Pit Showdown"
 run/main_scene="res://Scenes/MainMenu.tscn"
-config/features=PackedStringArray("4.3", "Mobile")
+config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
+RetroSfx="*res://Scripts/RetroSfx.gd"
 GameState="*res://Scripts/GameState.gd"
 
 [display]
@@ -29,7 +30,7 @@ window/handheld/orientation=4
 
 [input_devices]
 
-pointing/emulate_touch_from_mouse=true
+pointing/emulate_touch_from_mouse=false
 
 [input]
 
@@ -77,7 +78,8 @@ dash={
 
 [rendering]
 
-renderer/rendering_method="mobile"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
 textures/vram_compression/import_etc2_astc=true
 2d/snap/snap_2d_transforms_to_pixel=true

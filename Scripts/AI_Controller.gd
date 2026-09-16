@@ -4,8 +4,8 @@ extends Character
 ##   EASY   — wanders randomly; only slaps when the ball rolls into reach;
 ##            never dodges.
 ##   MEDIUM — tracks the ball, sidesteps incoming shots, slaps at opponents.
-##   HARD   — leads the ball's path, dodge-dashes, charges power slaps, and
-##            gangs up on the human player.
+##   HARD   — leads the ball's path, sometimes dodge-dashes, and charges.
+## Every difficulty is a free-for-all: CPUs target any surviving opponent.
 ##
 ## All physics, strike, and dash behavior is inherited from Character — this
 ## script only makes decisions: get_move_input() steers, handle_actions()
@@ -26,6 +26,8 @@ var _wander_timer := 0.0
 var _charge_target := 0.0
 var _ball: GagaBall
 var _pit_radius := 300.0
+var _reach_time := 0.0
+var _save_decision := -1
 
 func _ready() -> void:
 	super()
@@ -65,12 +67,17 @@ func _think() -> void:
 	_ball = _nearest_ball()
 	if _ball == null:
 		_state = State.WANDER
-	elif difficulty >= Difficulty.MEDIUM and _ball_threatens_me():
+	elif difficulty >= Difficulty.MEDIUM and _ball_threatens_me() \
+			and randf() < [0.0, 0.45, 0.68][difficulty]:
 		_state = State.DODGE
 	elif difficulty >= Difficulty.MEDIUM and not _ball.is_repeat_touch(self):
 		_state = State.CHASE
 	else:
 		_state = State.WANDER
+	# Even easy CPUs retrieve a dying ball; wandering forever used to
+	# leave entire matches stalled once the opening roll lost its speed.
+	if _ball != null and _ball.linear_velocity.length() < 150.0 and not _ball.is_repeat_touch(self):
+		_state = State.CHASE
 
 	match _state:
 		State.WANDER:
@@ -83,7 +90,7 @@ func _think() -> void:
 			if difficulty == Difficulty.HARD:
 				# Lead the moving ball. True wall-bounce reflection is a
 				# campaign-boss upgrade.
-				target_point += _ball.linear_velocity * 0.35
+				target_point += _ball.linear_velocity * 0.12
 			_move_dir = (target_point - position).normalized()
 		State.DODGE:
 			var side := _ball.linear_velocity.normalized().orthogonal()
@@ -91,7 +98,7 @@ func _think() -> void:
 			if (position + side * 60.0).length() > (position - side * 60.0).length():
 				side = -side
 			_move_dir = side
-			if difficulty == Difficulty.HARD and randf() < 0.35:
+			if difficulty == Difficulty.HARD and randf() < 0.18:
 				start_dash()
 
 	# Never hug the wall: past the safe radius, blend in a pull to center.
@@ -106,13 +113,35 @@ func _act_on_ball(delta: float) -> void:
 			release_strike()
 		return
 	if _ball_in_reach() and not _ball.is_repeat_touch(self):
-		if difficulty == Difficulty.HARD and randf() < 0.5:
+		if _incoming_fast_ball():
+			if _save_decision < 0:
+				_save_decision = 1 if randf() < [0.08, 0.32, 0.58][difficulty] else 0
+			if _save_decision == 0:
+				# A missed read is committed until the ball leaves reach. This
+				# prevents frame-by-frame rerolls from making every CPU perfect.
+				return
+		_reach_time += delta
+		var reaction: float = [0.18, 0.11, 0.07][difficulty]
+		if _reach_time < reaction:
+			return
+		_reach_time = 0.0
+		if difficulty == Difficulty.HARD and _ball.linear_velocity.length() < 90.0 and randf() < 0.3:
 			_charge_target = randf_range(0.5, 1.0)
 			begin_charge()
 		else:
 			_aim()
 			begin_charge()
 			release_strike()
+	else:
+		_reach_time = 0.0
+		_save_decision = -1
+
+func _incoming_fast_ball() -> bool:
+	if _ball.linear_velocity.length() < 180.0:
+		return false
+	var to_me := global_position - _ball.global_position
+	return to_me.length_squared() > 1.0 \
+			and _ball.linear_velocity.normalized().dot(to_me.normalized()) > 0.55
 
 func _nearest_ball() -> GagaBall:
 	var best: GagaBall = null
@@ -126,7 +155,7 @@ func _nearest_ball() -> GagaBall:
 	return best
 
 func _ball_in_reach() -> bool:
-	return strike_zone.get_overlapping_bodies().has(_ball)
+	return can_reach_ball(_ball)
 
 func _ball_threatens_me() -> bool:
 	if _ball.is_repeat_touch(self):
@@ -141,20 +170,16 @@ func _aim() -> void:
 	var dir := -position.normalized() if position != Vector2.ZERO else Vector2.DOWN
 	if target:
 		dir = (target.position - position).normalized()
-	facing = _snap_to_8_way(dir)
+	# Aim from the ball, not the fighter's feet: the ball starts offset.
+	facing = (target.global_position - _ball.global_position).normalized() if target else dir
 
 func _pick_target() -> Character:
 	var options: Array[Character] = []
-	var player: Character = null
 	for node in get_tree().get_nodes_in_group(&"characters"):
 		var other := node as Character
 		if other == null or other == self or not other.is_alive:
 			continue
 		options.append(other)
-		if other is PlayerCharacter:
-			player = other
 	if options.is_empty():
 		return null
-	if difficulty == Difficulty.HARD and player != null:
-		return player
 	return options.pick_random()

@@ -84,6 +84,14 @@ func _ensure_input_actions() -> void:
 			var event := InputEventKey.new()
 			event.physical_keycode = key
 			InputMap.action_add_event(action, event)
+	var mouse_strike := InputEventMouseButton.new()
+	mouse_strike.button_index = MOUSE_BUTTON_LEFT
+	InputMap.action_add_event(&"strike", mouse_strike)
+	if not InputMap.has_action(&"pause"):
+		InputMap.add_action(&"pause")
+		var pause_key := InputEventKey.new()
+		pause_key.physical_keycode = KEY_ESCAPE
+		InputMap.action_add_event(&"pause", pause_key)
 
 func start_campaign_stage(index: int) -> void:
 	var stage: Dictionary = CAMPAIGN_STAGES[index]
@@ -127,7 +135,8 @@ func report_match_result(player_won: bool) -> void:
 func _load_progress() -> void:
 	var config_file := ConfigFile.new()
 	if config_file.load(SAVE_PATH) == OK:
-		unlocked_stages = int(config_file.get_value("campaign", "unlocked_stages", 1))
+		unlocked_stages = clampi(int(config_file.get_value("campaign", "unlocked_stages", 1)),
+				1, CAMPAIGN_STAGES.size())
 
 func _save_progress() -> void:
 	var config_file := ConfigFile.new()

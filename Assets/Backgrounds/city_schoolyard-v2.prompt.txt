@@ -1,0 +1,10 @@
+Use case: stylized-concept
+Asset type: in-game background plate for a 1280x720 top-down arcade gaga-ball arena
+Primary request: Create an original late-1980s NES-style schoolyard and small-city recreation-center environment with the warm, scrappy neighborhood atmosphere of classic Japanese 8-bit beat-em-up and dodgeball games. This is for Gaga Pit Showdown.
+Scene/backdrop: top-down/three-quarter game view; brick school building, chain-link fence, sidewalk, trees, utility poles, distant low city buildings, neighborhood spectators, and small humorous environmental details around a clear central play area. Keep the entire central 760x650 region visually quiet and unobstructed because an octagonal wooden gaga pit is drawn over it at runtime. Concentrate environmental detail at the left/right/top edges.
+Subject: environment only; no playable characters and no ball
+Style/medium: crisp original 8-bit pixel art, chunky 16x16-tile logic, limited NES-like palette, strong dark outlines, readable clusters, slightly exaggerated proportions, no antialiasing, no gradients, no photorealism. Evoke the era and visual language without copying any specific game asset, character, map, or logo.
+Composition/framing: exact 16:9 landscape game backdrop; edge details must not compete with HUD; seamless visual hierarchy around the empty center
+Lighting/mood: bright late-afternoon schoolyard, energetic and friendly street-tournament mood
+Color palette: warm brick red, faded navy, golden tan, concrete gray, leafy green, small teal accents
+Constraints: no text, no letters, no logos, no UI, no watermark; one coherent environment; original asset; pixel-perfect hard edges; central area mostly quiet and usable

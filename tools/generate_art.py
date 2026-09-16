@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates the game's placeholder-quality-but-real 8-bit art.
+"""Generates the game's original late-1980s street-sports pixel art.
 
 Sprites are drawn from blocky primitives rather than hand-painted, so poses
 and team colors are parameters instead of duplicated files -- palette swaps
@@ -214,6 +214,19 @@ def draw_character(facing, pose, team):
     c.rect(torso_x0, torso_y0, torso_x1, torso_y1, jersey)
     c.rect(torso_x0, torso_y1 - 1, torso_x1, torso_y1, jersey_dark)
     c.rect(torso_x0, torso_y1 + 1, torso_x1, shorts_y1, SHORTS)
+
+    # Every palette is an individual outfit, not a team uniform. Bold,
+    # asymmetric street-sports details make fighters identifiable in motion.
+    if team == "gold":
+        c.rect(torso_x0 + 2, torso_y0 + 3, torso_x0 + 3, torso_y1 - 2, (255, 226, 105, 255))
+    elif team == "blue":
+        c.rect(torso_x0, torso_y0 + 4, torso_x1, torso_y0 + 5, (118, 183, 238, 255))
+    elif team == "red":
+        for stripe in range(3):
+            c.dot(torso_x0 + 3 + stripe, torso_y0 + 3 + stripe, (255, 154, 105, 255))
+            c.dot(torso_x0 + 7 + stripe, torso_y0 + 3 + stripe, (255, 154, 105, 255))
+    elif team == "green":
+        c.rect(torso_x0 + 5, torso_y0 + 2, torso_x0 + 6, torso_y1 - 2, (151, 220, 112, 255))
     if facing != "back":
         c.rect(torso_x0 + 4, torso_y0, torso_x0 + 7, torso_y0 + 1, jersey_dark)  # collar
 

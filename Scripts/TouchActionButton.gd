@@ -11,6 +11,10 @@ extends Control
 
 var _touch_index := -1
 
+func _exit_tree() -> void:
+	if _touch_index != -1:
+		Input.action_release(action)
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:

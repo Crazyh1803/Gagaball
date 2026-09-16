@@ -6,11 +6,10 @@ extends RigidBody2D
 ## thing that slows it down, keeping "doesn't roll forever" decoupled from
 ## "bounces lose no energy".
 ##
-## Tracks who touched it last so later iterations can enforce the double-touch
-## rule and attribute eliminations / out-of-bounds strikes.
+## Only legal slaps update ownership. Feet hits are refereed by Arena using
+## swept paths, independently of physical wall contacts.
 
-## Emitted when the ball rebounds off a pit wall. The double-touch rule (later)
-## listens to this: a wall contact re-legalizes a strike by the last toucher.
+## A wall rebound re-legalizes a strike by the last toucher.
 signal wall_bounced
 ## Emitted when the ball comes into physical contact with a character.
 ## Typed as Node, not Character: Character.gd refers to GagaBall, so naming
@@ -19,14 +18,28 @@ signal character_touched(character: Node)
 
 @export var max_speed: float = 900.0
 
-## The character that last struck or bumped the ball. null after a fresh drop.
+## The character that last struck the ball. null after a fresh drop.
 ## Persists across wall bounces so eliminations can be attributed.
 var last_touched_by: Node = null
 ## The character whose *next* touch would break the double-touch rule.
 ## Cleared by a wall bounce, replaced when a different character touches the
-## ball. Enforcement (elimination) is a later iteration; the game only tracks
-## it here.
+## ball. Character refuses illegal repeat slaps; Arena uses this memory
+## for own-shot immunity before a rebound.
 var repeat_toucher: Node = null
+var _trail: Array[Vector2] = []
+
+func _process(_delta: float) -> void:
+	_trail.push_front(global_position)
+	if _trail.size() > 10:
+		_trail.pop_back()
+	queue_redraw()
+
+func _draw() -> void:
+	for i in range(1, _trail.size()):
+		var alpha := (1.0 - float(i) / _trail.size()) * 0.3
+		draw_circle(to_local(_trail[i]), 12.0 - i * 0.7, Color(1.0, 0.77, 0.3, alpha))
+	draw_arc(Vector2.ZERO, 19.0, 0.0, TAU, 32,
+			Color("ffb45e") if linear_velocity.length() >= 120.0 else Color("81e0c2"), 2.0)
 
 func is_repeat_touch(character: Node) -> bool:
 	return repeat_toucher == character
@@ -49,8 +62,8 @@ func strike(direction: Vector2, speed: float, striker: Node) -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body.is_in_group(&"characters"):
-		last_touched_by = body
-		repeat_toucher = body
+		# Contact is not a legal strike. Never grant immunity before the
+		# referee sees the incoming hit.
 		character_touched.emit(body)
 	elif body is StaticBody2D:
 		# Pit walls are the only static bodies in the ball's collision mask.

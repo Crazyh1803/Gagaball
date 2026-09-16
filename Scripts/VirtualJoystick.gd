@@ -15,6 +15,9 @@ var _touch_index := -1
 var _center := Vector2.ZERO
 var _output := Vector2.ZERO
 
+func _exit_tree() -> void:
+	_release()
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
