@@ -23,14 +23,62 @@ func _check(condition: bool, description: String) -> void:
 func _run() -> void:
 	seed(42)
 	var state := root.get_node("GameState")
+	_check(state.CAMPAIGN_STAGES[0]["name"] == "Aukamm Elementary"
+			and state.CAMPAIGN_STAGES[0]["location"] == "Wiesbaden, Germany",
+			"Campaign opens at Aukamm Elementary in Wiesbaden")
+	var stage_backdrops := {}
+	var wall_palettes := {}
+	var court_tints := {}
+	for stage in state.CAMPAIGN_STAGES:
+		var backdrop: String = stage.get("backdrop", "")
+		stage_backdrops[backdrop] = true
+		wall_palettes[stage.get("wall_color", "")] = true
+		court_tints[stage.get("court_tint", "")] = true
+		_check(ResourceLoader.exists("res://Assets/Backgrounds/Stages/%s.png" % backdrop),
+				"%s has an imported background" % stage["location"])
+	_check(stage_backdrops.size() == state.CAMPAIGN_STAGES.size(),
+			"Every campaign city has a distinct background")
+	_check(wall_palettes.size() == state.CAMPAIGN_STAGES.size()
+			and court_tints.size() == state.CAMPAIGN_STAGES.size(),
+			"Every campaign city has a distinct pit palette")
 	state.start_friendly(4, 1)
 	var arena := (load("res://Scenes/GameArena.tscn") as PackedScene).instantiate()
 	root.add_child(arena)
+	var pit_bounds := Rect2(arena._octagon_points()[0], Vector2.ZERO)
+	for point in arena._octagon_points():
+		pit_bounds = pit_bounds.expand(point)
+	_check(pit_bounds.size.y < pit_bounds.size.x * 0.52,
+			"Pit geometry matches the revised high-angle ground plane")
+	_check(pit_bounds.position.y >= 0.0 and pit_bounds.size.x > 620.0,
+			"Large pit stays entirely in the foreground courtyard")
+	_check(arena.get_node("NeighborhoodBackdrop").texture != null,
+			"The configured city background is visible in the live arena")
+	var far_wall: StaticBody2D = arena.get_node("Wall0")
+	var near_wall: StaticBody2D = arena.get_node("Wall0")
+	for wall_index in arena.pit_sides:
+		var candidate := arena.get_node("Wall%d" % wall_index) as StaticBody2D
+		if candidate.position.y < far_wall.position.y:
+			far_wall = candidate
+		if candidate.position.y > near_wall.position.y:
+			near_wall = candidate
+	_check(far_wall.has_node("BoardFace") and near_wall.has_node("BoardFace")
+			and far_wall.z_index < near_wall.z_index,
+			"Far interior and near exterior board faces create court depth")
+	_check(float(far_wall.get_node("BoardFace").get_meta("visual_height"))
+			> float(near_wall.get_node("BoardFace").get_meta("visual_height")),
+			"Near wall uses a low gameplay cutaway")
+	var far_shape := (far_wall.get_child(0) as CollisionShape2D).shape as RectangleShape2D
+	var near_shape := (near_wall.get_child(0) as CollisionShape2D).shape as RectangleShape2D
+	_check(near_shape.size.x > far_shape.size.x,
+			"Pit side lengths converge toward the background vanishing point")
 	var player := arena.get_node("Player") as Character
 	var ball := arena.get_node("Ball") as GagaBall
+	_check(ball.position == arena._toss_start and ball.get_node("BallSprite").position.y < 0,
+			"Opening ball starts in the home representative's hand")
 	_check(ball.freeze and not player.is_physics_processing(), "Countdown freezes the roster and ball")
 	await create_timer(2.5).timeout
 	_check(arena._round_started and not ball.freeze, "Countdown starts the round")
+	arena._opening_safe = 0.0 # Test normal refereeing after the safe opening.
 	arena.set_physics_process(false)
 	for fighter in arena._alive:
 		fighter.set_physics_process(false)
@@ -165,5 +213,19 @@ func _run() -> void:
 				"%d-player match has knockouts or legal strikes" % count)
 		match_scene.queue_free()
 		await process_frame
+	# Reproduce the real stage-button signal order: the first callback removes
+	# MainMenu from the tree, then its click-sound callback still has to run.
+	var transition_menu := (load("res://Scenes/MainMenu.tscn") as PackedScene).instantiate()
+	root.add_child(transition_menu)
+	current_scene = transition_menu
+	transition_menu._on_campaign_pressed()
+	transition_menu.stage_list.get_child(0).pressed.emit()
+	await process_frame
+	await process_frame
+	_check(current_scene != null and current_scene.name == "GameArena",
+			"Campaign transition keeps the menu click sound safe during scene exit")
 	print("GAMEPLAY CHECKS: ", _checks, " passed: ", _checks - _failures, " failed: ", _failures)
+	current_scene.queue_free()
+	root.get_node("RetroSfx").stop_all()
+	await create_timer(0.3).timeout
 	quit(1 if _failures else 0)

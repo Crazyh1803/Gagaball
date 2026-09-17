@@ -30,8 +30,7 @@ func _run() -> void:
 	print("CPU outs: ", cpu_outs, " | CPU-vs-CPU credited outs: ", cpu_vs_cpu_outs)
 	root.get_node("RetroSfx").stop_all()
 	arena.queue_free()
-	await process_frame
-	await process_frame
+	await create_timer(0.3).timeout
 	if cpu_vs_cpu_outs == 0:
 		push_error("No CPU eliminated another CPU during the free-for-all soak test")
 		quit(1)

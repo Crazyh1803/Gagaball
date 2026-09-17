@@ -19,6 +19,8 @@ func _exit_tree() -> void:
 	_release()
 
 func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if _touch_index == -1 and get_global_rect().has_point(event.position):

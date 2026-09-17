@@ -12,20 +12,37 @@ extends Control
 var _touch_index := -1
 
 func _exit_tree() -> void:
-	if _touch_index != -1:
-		Input.action_release(action)
+	release_touch()
+
+func _send_action(pressed: bool) -> void:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = pressed
+	Input.parse_input_event(event)
+
+func release_touch() -> void:
+	if _touch_index == -1:
+		return
+	_touch_index = -1
+	# Clear held state immediately even if the event queue is paused/buffered.
+	Input.action_release(action)
+	_send_action(false)
+	queue_redraw()
 
 func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if _touch_index == -1 and get_global_rect().has_point(event.position):
 				_touch_index = event.index
-				Input.action_press(action)
+				_send_action(true)
 				queue_redraw()
 		elif event.index == _touch_index:
-			_touch_index = -1
-			Input.action_release(action)
-			queue_redraw()
+			release_touch()
+	elif event is InputEventScreenDrag and event.index == _touch_index:
+		if not get_global_rect().grow(32).has_point(event.position):
+			release_touch()
 
 func _draw() -> void:
 	var center := size / 2.0

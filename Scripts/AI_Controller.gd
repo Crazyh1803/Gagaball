@@ -26,6 +26,9 @@ var _wander_timer := 0.0
 var _charge_target := 0.0
 var _ball: GagaBall
 var _pit_radius := 300.0
+var _pit_vertical_scale := 1.0
+var _pit_perspective_taper := 0.0
+var _pit_center := Vector2.ZERO
 var _reach_time := 0.0
 var _save_decision := -1
 
@@ -38,6 +41,15 @@ func _ready() -> void:
 		var radius = arena.get("pit_radius")  # null when the parent isn't an Arena
 		if radius != null:
 			_pit_radius = radius
+		var vertical_scale = arena.get("pit_vertical_scale")
+		if vertical_scale != null:
+			_pit_vertical_scale = vertical_scale
+		var perspective_taper = arena.get("pit_perspective_taper")
+		if perspective_taper != null:
+			_pit_perspective_taper = perspective_taper
+		var pit_center = arena.get("pit_center_offset")
+		if pit_center != null:
+			_pit_center = pit_center
 
 func get_move_input() -> Vector2:
 	return _move_dir
@@ -95,17 +107,26 @@ func _think() -> void:
 		State.DODGE:
 			var side := _ball.linear_velocity.normalized().orthogonal()
 			# Sidestep toward whichever side is farther from the wall.
-			if (position + side * 60.0).length() > (position - side * 60.0).length():
+			if (position + side * 60.0 - _pit_center).length() \
+					> (position - side * 60.0 - _pit_center).length():
 				side = -side
 			_move_dir = side
 			if difficulty == Difficulty.HARD and randf() < 0.18:
 				start_dash()
 
 	# Never hug the wall: past the safe radius, blend in a pull to center.
-	if position.length() > _pit_radius * safe_radius_fraction:
-		_move_dir = (_move_dir - position.normalized() * 1.2).normalized()
+	var relative_position := position - _pit_center
+	var world_y := relative_position.y / _pit_vertical_scale
+	var width_scale := 1.0 + (world_y / _pit_radius) * _pit_perspective_taper
+	var ground_position := Vector2(relative_position.x / width_scale, world_y)
+	if ground_position.length() > _pit_radius * safe_radius_fraction:
+		_move_dir = (_move_dir + (_pit_center - position).normalized() * 1.2).normalized()
 
 func _act_on_ball(delta: float) -> void:
+	if _ball.controller == self and not is_charging():
+		_aim()
+		_charge_target = 0.25
+		begin_charge()
 	if is_charging():
 		set_charge(charge_ratio + delta / charge_time)
 		if charge_ratio >= _charge_target or not _ball_in_reach():
@@ -125,6 +146,9 @@ func _act_on_ball(delta: float) -> void:
 		if _reach_time < reaction:
 			return
 		_reach_time = 0.0
+		if difficulty >= Difficulty.MEDIUM and _ball.global_position.distance_to(global_position) < 48 and (_ball.controller != null or _ball.linear_velocity.length() < 150):
+			begin_control()
+			if _ball.controller == self: return
 		if difficulty == Difficulty.HARD and _ball.linear_velocity.length() < 90.0 and randf() < 0.3:
 			_charge_target = randf_range(0.5, 1.0)
 			begin_charge()

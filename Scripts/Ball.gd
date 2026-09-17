@@ -27,6 +27,59 @@ var last_touched_by: Node = null
 ## for own-shot immunity before a rebound.
 var repeat_toucher: Node = null
 var _trail: Array[Vector2] = []
+signal control_changed(stolen: bool)
+var controller: Node2D = null
+var control_left := 0.0
+var _control_lock := 0.0
+var _dribble_clock := 0.0
+
+func try_control(actor: Node2D) -> bool:
+	if controller == actor: return true
+	if _control_lock > 0 or (freeze and controller == null) or not actor.is_alive or actor.jump_height > 0 or actor.is_dashing(): return false
+	if actor.global_position.distance_to(global_position) > float(actor.get("control_reach")): return false
+	# A well-timed trap may catch a fast shot. The double-touch rule still
+	# prevents recapturing your own loose ball before a wall/opponent touch.
+	if controller == null and repeat_toucher == actor: return false
+	var stolen := controller != null
+	controller = actor
+	control_left = 1.6
+	_control_lock = 0.22
+	last_touched_by = actor
+	repeat_toucher = actor
+	linear_velocity = Vector2.ZERO
+	freeze = true
+	control_changed.emit(stolen)
+	return true
+
+func release_control() -> void:
+	if controller == null: return
+	var actor := controller
+	controller = null
+	control_left = 0
+	_control_lock = 0.3
+	freeze = false
+	$BallSprite.position.y = 0
+	if is_instance_valid(actor): linear_velocity = actor.facing * 100
+
+func _physics_process(delta: float) -> void:
+	_control_lock = maxf(0, _control_lock - delta)
+	if controller == null: return
+	if not is_instance_valid(controller) or not controller.is_alive:
+		release_control()
+		return
+	control_left -= delta
+	if control_left <= 0 or controller.jump_height > 0 or controller.is_dashing():
+		release_control()
+		return
+	var desired: Vector2 = controller.global_position + controller.facing * 32
+	var query := PhysicsRayQueryParameters2D.create(controller.global_position, desired, CollisionLayers.WALLS)
+	if not get_world_2d().direct_space_state.intersect_ray(query).is_empty():
+		release_control()
+		return
+	global_position = desired
+	linear_velocity = Vector2.ZERO
+	_dribble_clock += delta
+	$BallSprite.position.y = -absf(sin(_dribble_clock * 14)) * 10
 
 func _process(_delta: float) -> void:
 	_trail.push_front(global_position)
@@ -42,10 +95,13 @@ func _draw() -> void:
 			Color("ffb45e") if linear_velocity.length() >= 120.0 else Color("81e0c2"), 2.0)
 
 func is_repeat_touch(character: Node) -> bool:
-	return repeat_toucher == character
+	return repeat_toucher == character and controller != character
 
 func _ready() -> void:
 	add_to_group(&"balls")
+	process_physics_priority = 5
+	physics_material_override = physics_material_override.duplicate()
+	physics_material_override.bounce = 0.96
 	body_entered.connect(_on_body_entered)
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
@@ -56,6 +112,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 ## Send the ball flying from a slap or power slap.
 func strike(direction: Vector2, speed: float, striker: Node) -> void:
+	release_control()
 	last_touched_by = striker
 	repeat_toucher = striker
 	linear_velocity = direction.normalized() * minf(speed, max_speed)

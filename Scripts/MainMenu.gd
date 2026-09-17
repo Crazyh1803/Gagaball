@@ -1,14 +1,22 @@
 extends Control
-## Title screen: USA Pit Tour stage select, friendly match setup, and settings
+## Title screen: Pit Tour stage select, friendly match setup, and settings
 ## (with the support-the-dev link). Stage buttons are built from
 ## GameState.CAMPAIGN_STAGES so the roadmap lives in one place.
 
 const ARENA_SCENE := "res://Scenes/GameArena.tscn"
+var _league_panel: VBoxContainer
+var _league_choice: OptionButton
+var _league_info: Label
+var _new_season_dialog: ConfirmationDialog
+var _friendly_city: OptionButton
 
 @onready var stage_list: VBoxContainer = $CampaignPanel/StageList
 @onready var _panels: Array[Control] = [
 	$MainButtons, $CampaignPanel, $FriendlyPanel, $SettingsPanel,
 ]
+## Cached while MainMenu is in the tree. This autoload remains valid when a
+## button removes the menu during an ensuing scene change.
+@onready var _sfx: Node = get_node("/root/RetroSfx")
 
 func _ready() -> void:
 	theme = GameTheme.create()
@@ -43,15 +51,39 @@ func _ready() -> void:
 		get_tree().change_scene_to_file(ARENA_SCENE))
 	$MainButtons.add_child(quick)
 	$MainButtons.move_child(quick, 0)
+	$MainButtons.offset_top = -115
+	$MainButtons.add_theme_constant_override("separation", 12)
+	var creator := Button.new()
+	creator.text = "MY PLAYERS  /  CREATE & EQUIP"
+	creator.add_theme_font_size_override("font_size", 20)
+	creator.pressed.connect(func() -> void:
+		get_tree().change_scene_to_file("res://Scenes/PlayerCreator.tscn"))
+	$MainButtons.add_child(creator)
+	$MainButtons.move_child(creator, 2)
+	var active := Label.new()
+	active.text = "PLAYING AS  %s   •   SLOT %d" % [GameState.current_player().name, GameState.active_player_slot + 1]
+	active.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	active.position = Vector2(0, 205)
+	active.size.x = 1280
+	active.name = "ActivePlayer"
+	add_child(active)
 	var sfx_button := Button.new()
 	sfx_button.name = "SfxButton"
-	sfx_button.text = "8-BIT SFX: ON"
+	sfx_button.text = "16-BIT ARCADE SFX: ON" if _sfx.enabled else "16-BIT ARCADE SFX: OFF"
 	sfx_button.pressed.connect(func() -> void:
-		var sfx = get_node("/root/RetroSfx")
-		sfx.enabled = not sfx.enabled
-		sfx_button.text = "8-BIT SFX: ON" if sfx.enabled else "8-BIT SFX: OFF")
+		_sfx.enabled = not _sfx.enabled
+		sfx_button.text = "16-BIT ARCADE SFX: ON" if _sfx.enabled else "16-BIT ARCADE SFX: OFF")
 	$SettingsPanel.add_child(sfx_button)
 	$SettingsPanel.move_child(sfx_button, 0)
+	var music_button := Button.new()
+	music_button.name = "MusicButton"
+	music_button.text = "MUSIC: ON" if _sfx.music_enabled else "MUSIC: OFF"
+	music_button.pressed.connect(func() -> void:
+		_sfx.set_music_enabled(not _sfx.music_enabled)
+		music_button.text = "MUSIC: ON" if _sfx.music_enabled else "MUSIC: OFF")
+	$SettingsPanel.add_child(music_button)
+	$SettingsPanel.move_child(music_button, 1)
+	_sfx.stop_music()
 	var subtitle := Label.new()
 	subtitle.text = "ONE BALL. NO TEAMS. LAST ONE STANDING."
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -61,7 +93,7 @@ func _ready() -> void:
 	subtitle.add_theme_color_override("font_color", Color("81d9c1"))
 	add_child(subtitle)
 	var instructions := Label.new()
-	instructions.text = "SLAP IT AWAY. DODGE THE REBOUND. OWN THE PIT.\nWASD / arrows move  •  Space / click slap  •  Hold to charge  •  Shift evade"
+	instructions.text = "WASD / arrows move  •  Space / click slap  •  J / E jump  •  Shift dash  •  C trap / steal\nPAD: Left stick move  •  Right stick aim  •  X / RB slap  •  A jump  •  B dash  •  Y trap / steal"
 	instructions.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	instructions.position = Vector2(0, 620)
 	instructions.size.x = 1280
@@ -82,24 +114,100 @@ func _ready() -> void:
 		button.text = "%d. %s — %s" % [i + 1, stage["name"], stage["location"]]
 		button.pressed.connect(_on_stage_pressed.bind(i))
 		stage_list.add_child(button)
+	_build_league_menu()
+	_friendly_city = OptionButton.new()
+	_friendly_city.name = "VenueChoice"
+	_friendly_city.add_item("RANDOM CITY")
+	_friendly_city.set_item_metadata(0, "")
+	for city in GameState.all_cities():
+		_friendly_city.add_item(city.location)
+		_friendly_city.set_item_metadata(_friendly_city.item_count - 1, city.city_id)
+	$FriendlyPanel.add_child(_friendly_city)
+	$FriendlyPanel.move_child(_friendly_city, 4)
 	_wire_ui_sounds(self)
+	quick.grab_focus()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel"):
+		_show_panel($MainButtons)
+		get_viewport().set_input_as_handled()
 
 func _wire_ui_sounds(node: Node) -> void:
 	if node is Button:
-		(node as Button).pressed.connect(func() -> void:
-			get_node("/root/RetroSfx").play(&"ui", -10.0, 0.02))
+		(node as Button).pressed.connect(_play_ui_sound)
 	for child in node.get_children():
 		_wire_ui_sounds(child)
 
+## A button may change scenes before its later signal callbacks run. Use the
+## cached autoload so playback does not depend on MainMenu still being active.
+func _play_ui_sound() -> void:
+	_sfx.play(&"ui", -10.0, 0.02)
+
 func _show_panel(panel: Control) -> void:
 	$Instructions.visible = panel == $MainButtons
+	$ActivePlayer.visible = panel == $MainButtons
 	for p in _panels:
 		p.visible = p == panel
+	preload("res://Scripts/InputSetup.gd").focus_first(panel)
 
 func _on_campaign_pressed() -> void:
-	for i in stage_list.get_child_count():
-		(stage_list.get_child(i) as Button).disabled = i >= GameState.unlocked_stages
-	_show_panel($CampaignPanel)
+	_show_panel(_league_panel)
+	(_league_panel.get_node("NewCareer") if GameState.career().is_empty() else _league_panel.get_node("ContinueSeason")).grab_focus()
+
+func _build_league_menu() -> void:
+	_league_panel = VBoxContainer.new()
+	_league_panel.name = "LeaguePanel"
+	_league_panel.position = Vector2(280, 190)
+	_league_panel.size = Vector2(720, 480)
+	_league_panel.add_theme_constant_override("separation", 9)
+	add_child(_league_panel)
+	_panels.append(_league_panel)
+	_league_panel.hide()
+	_league_info = Label.new()
+	_league_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_league_info.add_theme_font_size_override("font_size", 16)
+	_league_info.add_theme_constant_override("line_spacing", -4)
+	var career := GameState.career()
+	_league_info.text = "BEST-OF-3 CITIES · podium earns 3 / 2 / 1 league points\nTop two promoted · bottom two relegated · ties: city wins, places, then seed"
+	if not career.is_empty():
+		_league_info.text += "\n\nSEASON %d · %s\n" % [career.season, GameState.CATALOG.NAMES[int(career.last_league) if career.complete else GameState.SEASON.player_league(career)]]
+		_league_info.text += GameState.standings_text(career.complete)
+		if career.complete: _league_info.text += "\n" + career.movement
+	_league_panel.add_child(_league_info)
+	var resume := Button.new()
+	resume.name = "ContinueSeason"
+	resume.text = "START NEXT SEASON" if not career.is_empty() and career.complete else "CONTINUE SEASON"
+	resume.disabled = career.is_empty()
+	resume.pressed.connect(_play_league)
+	_league_panel.add_child(resume)
+	_league_choice = OptionButton.new()
+	_league_choice.name = "LeagueChoice"
+	for i in 4:
+		_league_choice.add_item("%s — %s" % [GameState.CATALOG.NAMES[i], GameState.CATALOG.DESCRIPTIONS[i]])
+	_league_panel.add_child(_league_choice)
+	var start := Button.new()
+	start.name = "NewCareer"
+	start.text = "NEW CAREER IN SELECTED LEAGUE"
+	start.pressed.connect(func() -> void:
+		if GameState.career().is_empty(): _begin_career()
+		else: _new_season_dialog.popup_centered(Vector2i(600, 170)))
+	_league_panel.add_child(start)
+	var back := Button.new()
+	back.text = "BACK"
+	back.pressed.connect(_on_back_pressed)
+	_league_panel.add_child(back)
+	_new_season_dialog = ConfirmationDialog.new()
+	_new_season_dialog.dialog_text = "Replace this player's league career?\nTheir appearance and other saved players' careers are kept."
+	_new_season_dialog.confirmed.connect(_begin_career)
+	add_child(_new_season_dialog)
+
+func _begin_career() -> void:
+	GameState.new_career(_league_choice.selected)
+	_play_league()
+
+func _play_league() -> void:
+	GameState.start_league_round()
+	get_tree().change_scene_to_file(ARENA_SCENE)
 
 func _on_friendly_pressed() -> void:
 	_show_panel($FriendlyPanel)
@@ -115,7 +223,7 @@ func _on_stage_pressed(index: int) -> void:
 	get_tree().change_scene_to_file(ARENA_SCENE)
 
 func _on_friendly_start_pressed() -> void:
-	GameState.start_friendly(_selected_count(), _selected_difficulty())
+	GameState.start_friendly(_selected_count(), _selected_difficulty(), str(_friendly_city.get_item_metadata(_friendly_city.selected)))
 	get_tree().change_scene_to_file(ARENA_SCENE)
 
 func _on_support_pressed() -> void:

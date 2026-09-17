@@ -20,6 +20,7 @@ signal struck_ball(ball: GagaBall, power: float)
 signal strike_blocked(ball: GagaBall)
 signal dashed(direction: Vector2)
 signal knocked_out(character: Character)
+signal jumped
 
 @export_group("Movement")
 @export var move_speed: float = 230.0
@@ -35,11 +36,19 @@ signal knocked_out(character: Character)
 @export var strike_reach: float = 70.0
 @export var strike_window: float = 0.16
 @export var strike_cooldown: float = 0.28
+@export var control_reach: float = 58.0
+@export var control_window: float = 0.18
+@export var control_cooldown: float = 0.30
 
 @export_group("Dash")
 @export var dash_speed: float = 560.0
 @export var dash_duration: float = 0.16
 @export var dash_cooldown: float = 0.7
+
+@export_group("Jump")
+@export var jump_duration := 0.62
+@export var jump_cooldown := 0.95
+@export var jump_peak := 58.0
 
 @export_group("Looks")
 @export var display_name := "FIGHTER"
@@ -47,7 +56,7 @@ signal knocked_out(character: Character)
 @export var slap_frame_time: float = 0.18
 @export var walk_fps: float = 9.0
 
-## Sprite sheet layout (see tools/generate_art.py): 8 columns x 3 rows.
+## Sprite sheet layout (see FighterArt.gd): 8 columns x 3 rows.
 const ROW_FRONT := 0
 const ROW_SIDE := 1
 const ROW_BACK := 2
@@ -68,18 +77,27 @@ var _slap_timer := 0.0
 var _celebrating := false
 var _strike_time_left := 0.0
 var _strike_cooldown_left := 0.0
+var _control_time_left := 0.0
+var _control_cooldown_left := 0.0
 var _swing_power := 0.0
 var _swing_direction := Vector2.DOWN
 
 var _dash_time_left := 0.0
 var _dash_cooldown_left := 0.0
 var _dash_direction := Vector2.ZERO
+var _jump_elapsed := -1.0
+var _jump_cooldown_left := 0.0
+var jump_height := 0.0
 
 @onready var strike_zone: Area2D = $StrikeZone
 @onready var sprite: Sprite2D = $Sprite
 
 func _ready() -> void:
 	add_to_group(&"characters")
+	# Keep Sprite at its original path for scenes/tools; animate its transform
+	# around the feet using offset, rather than moving the collision body.
+	sprite.offset = Vector2(0,-46)
+	sprite.position = Vector2.ZERO
 	_update_sprite(0.0)
 
 ## Swap in an individual fighter palette (colors do not indicate teams).
@@ -100,8 +118,13 @@ func _physics_process(delta: float) -> void:
 	var input_dir := get_move_input().limit_length(1.0)
 	facing = get_aim_direction(input_dir)
 	handle_actions(delta)
+	_update_jump(delta)
 	_dash_cooldown_left = maxf(_dash_cooldown_left - delta, 0.0)
 	_strike_cooldown_left = maxf(_strike_cooldown_left - delta, 0.0)
+	_control_cooldown_left = maxf(_control_cooldown_left - delta, 0.0)
+	if _control_time_left > 0.0:
+		_try_connect_control()
+		_control_time_left = maxf(_control_time_left - delta, 0.0)
 	if _strike_time_left > 0.0:
 		_try_connect_strike()
 		_strike_time_left = maxf(_strike_time_left - delta, 0.0)
@@ -111,6 +134,7 @@ func _physics_process(delta: float) -> void:
 		velocity = _dash_direction * dash_speed
 	else:
 		var speed := move_speed * (charge_move_penalty if is_charging() else 1.0)
+		if controlled_ball() != null: speed *= 0.7
 		var rate := acceleration if input_dir != Vector2.ZERO else deceleration
 		velocity = velocity.move_toward(input_dir * speed, rate * delta)
 
@@ -121,14 +145,88 @@ func _physics_process(delta: float) -> void:
 func get_aim_direction(input_dir: Vector2) -> Vector2:
 	return input_dir.normalized() if input_dir != Vector2.ZERO else facing
 
+func controlled_ball() -> GagaBall:
+	for candidate in get_tree().get_nodes_in_group(&"balls"):
+		if candidate.controller == self: return candidate as GagaBall
+	return null
+
+func begin_control() -> void:
+	if not is_alive or _jump_elapsed >= 0.0 or is_dashing() or _control_cooldown_left > 0.0:
+		return
+	var held := controlled_ball()
+	if held != null:
+		held.release_control()
+		_control_cooldown_left = control_cooldown
+		return
+	_control_time_left = control_window
+	_control_cooldown_left = control_cooldown
+	_try_connect_control()
+
+func _try_connect_control() -> void:
+	var closest: GagaBall = null
+	var distance := INF
+	for candidate in get_tree().get_nodes_in_group(&"balls"):
+		var current := candidate as GagaBall
+		var current_distance := global_position.distance_to(current.global_position)
+		if current_distance <= control_reach and current_distance < distance:
+			closest = current
+			distance = current_distance
+	if closest != null and closest.try_control(self):
+		_control_time_left = 0.0
+
+func release_ball_control() -> void:
+	var held := controlled_ball()
+	if held != null: held.release_control()
+
 func dash_ready_ratio() -> float:
 	return 1.0 - _dash_cooldown_left / dash_cooldown
+
+func jump_ready_ratio() -> float:
+	return 1.0 - _jump_cooldown_left / jump_cooldown
+
+func start_jump() -> void:
+	if not is_alive or _jump_elapsed >= 0.0 or _jump_cooldown_left > 0.0 or is_dashing():
+		return
+	_jump_elapsed = 0.0
+	release_ball_control()
+	_jump_cooldown_left = jump_cooldown
+	charge_ratio = -1.0
+	_strike_time_left = 0.0
+	jumped.emit()
+
+func _update_jump(delta: float) -> void:
+	_jump_cooldown_left = maxf(0.0, _jump_cooldown_left - delta)
+	if _jump_elapsed >= 0.0:
+		_jump_elapsed += delta
+		var t := clampf(_jump_elapsed / jump_duration,0,1)
+		jump_height = sin(t * PI) * jump_peak
+		if t >= 1.0:
+			settle_jump()
+		sprite.position.y = -jump_height
+		if has_node("NameTag"):
+			$NameTag.position.y = -108 - jump_height
+
+func clears_ball() -> bool:
+	# Takeoff and landing are vulnerable: jump timing matters.
+	return jump_height >= 25.0
+
+func settle_jump() -> void:
+	_jump_elapsed = -1.0
+	jump_height = 0.0
+	sprite.position = Vector2.ZERO
+	if has_node("NameTag"):
+		$NameTag.position.y = -108
 
 func _draw() -> void:
 	if not is_alive:
 		return
 	var tint := Color("ffd777") if self is PlayerCharacter else Color("8ab8de")
-	draw_circle(Vector2(0, -1), 20.0, Color(0.02, 0.04, 0.07, 0.3))
+	# Flatten the contact shadow into the courtyard's ground plane.
+	var shadow_scale := lerpf(1.0,0.65,jump_height / jump_peak)
+	draw_set_transform(Vector2(3, 1), 0.0, Vector2(shadow_scale, 0.32 * shadow_scale))
+	draw_circle(Vector2.ZERO, 26.0, Color(0.04, 0.04, 0.08, 0.10))
+	draw_circle(Vector2.ZERO, 21.0, Color(0.02, 0.03, 0.06, 0.23))
+	draw_set_transform(Vector2.ZERO)
 	if self is PlayerCharacter:
 		draw_arc(Vector2.ZERO, 24.0, 0.0, TAU * dash_ready_ratio(), 40, tint, 2.0)
 		var tip := facing * 43.0
@@ -136,7 +234,7 @@ func _draw() -> void:
 		draw_line(tip, tip - facing.rotated(0.5) * 10.0, tint, 3.0)
 		draw_line(tip, tip - facing.rotated(-0.5) * 10.0, tint, 3.0)
 	if is_charging():
-		draw_arc(Vector2(0, -60), 16.0, -PI / 2.0,
+		draw_arc(Vector2(0, -88), 16.0, -PI / 2.0,
 				-PI / 2.0 + TAU * maxf(charge_ratio, 0.01), 40, tint, 4.0)
 	if _slap_timer > 0.0:
 		draw_arc(Vector2.ZERO, strike_reach, _swing_direction.angle() - 1.3,
@@ -158,7 +256,7 @@ func is_charging() -> bool:
 	return charge_ratio >= 0.0
 
 func begin_charge() -> void:
-	if not is_alive or is_charging() or _strike_cooldown_left > 0.0:
+	if not is_alive or _jump_elapsed >= 0.0 or is_charging() or _strike_cooldown_left > 0.0:
 		return
 	charge_ratio = 0.0
 
@@ -184,6 +282,8 @@ func can_reach_ball(target: GagaBall) -> bool:
 	return global_position.distance_to(target.global_position) <= strike_reach
 
 func _try_connect_strike() -> void:
+	if _jump_elapsed >= 0.0:
+		return
 	var candidate: GagaBall = null
 	var blocked: GagaBall = null
 	var closest := INF
@@ -210,11 +310,12 @@ func _try_connect_strike() -> void:
 # --- Dash ---
 
 func start_dash() -> void:
-	if not is_alive or _dash_cooldown_left > 0.0:
+	if not is_alive or _jump_elapsed >= 0.0 or _dash_cooldown_left > 0.0:
 		return
 	var dir := get_move_input()
 	_dash_direction = dir.normalized() if dir != Vector2.ZERO else facing
 	_dash_time_left = dash_duration
+	release_ball_control()
 	_dash_cooldown_left = dash_cooldown
 	dashed.emit(_dash_direction)
 
@@ -223,10 +324,9 @@ func is_dashing() -> bool:
 
 # --- Elimination ---
 
-## Knock this character out of the round: freeze it, remove it from physics
-## (deferred — this is reached from physics signal callbacks), flash the
-## sprite, and leave a faded ghost so the pit shows who's out.
-func eliminate() -> void:
+## Remove the fighter from physics immediately/deferred, then animate a
+## purely visual knockback, tumble and bounce. Fallen fighters stay faded.
+func eliminate(impact_direction := Vector2.RIGHT) -> void:
 	if not is_alive:
 		return
 	is_alive = false
@@ -238,11 +338,20 @@ func eliminate() -> void:
 	set_deferred("collision_layer", 0)
 	set_deferred("collision_mask", 0)
 	$LowerHurtbox.set_deferred("monitoring", false)
+	# Dodgeball-style pratfall: kick up, tumble from the feet, bounce and rest.
+	var direction := impact_direction.normalized() if impact_direction.length_squared() > 0.0 else Vector2.RIGHT
+	var turn := 1.0 if direction.x >= 0.0 else -1.0
+	var landing := Vector2(direction.x * 20, 5)
 	var tween := create_tween()
-	for i in 4:
-		tween.tween_property(self, "modulate:a", 0.1, 0.07)
-		tween.tween_property(self, "modulate:a", 1.0, 0.07)
-	tween.tween_property(self, "modulate:a", 0.25, 0.15)
+	tween.set_parallel(true)
+	tween.tween_property(sprite,"position",Vector2(direction.x * 10,-22),0.13).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite,"rotation",turn * 0.35,0.13)
+	tween.chain().tween_property(sprite,"position",landing,0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.parallel().tween_property(sprite,"rotation",turn * 1.45,0.25)
+	tween.parallel().tween_property(sprite,"scale",Vector2(1.0,0.72),0.25)
+	tween.chain().tween_property(sprite,"position",landing + Vector2(0,-5),0.08)
+	tween.chain().tween_property(sprite,"position",landing,0.10)
+	tween.chain().tween_property(self,"modulate:a",0.38,0.3)
 	knocked_out.emit(self)
 
 # --- Internals ---
@@ -268,6 +377,8 @@ func _update_sprite(delta: float) -> void:
 		_slap_timer -= delta
 		col = COL_SLAP
 	elif is_charging():
+		col = COL_CHARGE
+	elif _jump_elapsed >= 0.0:
 		col = COL_CHARGE
 	elif velocity.length() > 12.0:
 		# Cycle faster when running faster, so dashes look urgent.
