@@ -34,8 +34,11 @@ static func normalize(value: Dictionary) -> Dictionary:
 	var p := defaults()
 	var city := str(value.get("home_city", "wiesbaden"))
 	p.home_city = city if preload("res://Scripts/LeagueCatalog.gd").PALETTES.has(city) else "wiesbaden"
-	var raw_name: String = str(value.get("name", "ROOKIE")).strip_edges().to_upper()
-	p["name"] = raw_name.substr(0, 14) if not raw_name.is_empty() else "ROOKIE"
+	# Preserve the spelling and casing the player chose. Earlier builds forced
+	# every saved name to uppercase, which made the editor feel as if it ignored
+	# the text field. LineEdit prevents newlines, but old/imported saves may not.
+	var raw_name: String = str(value.get("name", "ROOKIE")).replace("\n", " ").replace("\r", " ").replace("\t", " ").strip_edges()
+	p["name"] = raw_name.substr(0, 24) if not raw_name.is_empty() else "ROOKIE"
 	for entry in [["skin", SKINS.size()], ["hair_color", HAIRS.size()],
 			["hair_style", STYLES.size()], ["hat", HATS.size()], ["beard", BEARDS.size()],
 			["eye_color", EYES.size()], ["body_type", BODIES.size()],
@@ -244,6 +247,21 @@ static func _polish_frame(im: Image) -> void:
 	var source := im.duplicate() as Image
 	var sunlight := Color("ffd990")
 	var bounce := Color("36445f")
+	var arcade_ink := Color("111827")
+	# The promo art's strongest character cue is its heavy navy silhouette.
+	# Add a one-pixel external keyline before the lighting pass so customized
+	# fighters retain that same legibility against every detailed backdrop.
+	for y in range(1, H - 1):
+		for x in range(1, W - 1):
+			if source.get_pixel(x, y).a >= 0.5:
+				continue
+			var borders_fighter := false
+			for oy in range(-1, 2):
+				for ox in range(-1, 2):
+					if (ox != 0 or oy != 0) and source.get_pixel(x + ox, y + oy).a >= 0.5:
+						borders_fighter = true
+			if borders_fighter:
+				im.set_pixel(x, y, arcade_ink)
 	for y in range(1, H - 1):
 		for x in range(1, W - 1):
 			var pixel := source.get_pixel(x, y)

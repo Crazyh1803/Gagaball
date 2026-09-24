@@ -1,6 +1,6 @@
 # Gaga Pit Showdown
 
-A three-quarter-view, pixel-art arcade take on Gaga Ball built in Godot 4.3+.
+A three-quarter-view, pixel-art arcade take on Gaga Ball built in Godot 4.7.2.
 One human, CPU opponents, an octagonal pit, and a last-one-standing round.
 
 ## Open the right project
@@ -11,9 +11,10 @@ a second project during filesystem scans. The root project contains the
 scenes, assets, input map, and GameState autoload. Press F5, then
 **Jump Into the Pit** for quick play.
 
-The current character-creator/tour build is verified with **Godot 4.3 stable**.
-Use that version for this checkout. The Compatibility renderer is used for
-broader desktop/mobile support; avoid mixing editor versions and import caches.
+The Android release build is verified with **Godot 4.7.2 stable**. This version
+is required for the current Google Play target API. The Compatibility renderer
+is used for broader desktop/mobile support; avoid mixing editor versions and
+import caches.
 
 If Godot reports repeated **Safe save failed** messages while importing, close
 every editor and running game for this project, remove the root `.godot`
@@ -117,7 +118,7 @@ Two round wins clinch early; otherwise round wins, round podium totals and
 summed finishing places rank the series. The final city podium receives 3, 2
 and 1 league point; everyone else receives zero. At season end the top two clubs
 are promoted and the bottom two relegated (except at the top/bottom divisions).
-Results automatically continue to the next game or city after four seconds.
+Results wait on the season table until the player continues to the next game or city.
 
 **Custom Match:** four, six, or eight fighters at Easy, Medium, or Hard CPU
 difficulty, in a randomly selected venue.
@@ -182,7 +183,7 @@ so its entire pit sits in the dry clearing, below the bayou waterline.
 Run the real scene/physics integration suite:
 
 ```powershell
-& "D:\GODOT\Godot_v4.3-stable_win64.exe" --headless --path . --script res://tools/test_gameplay.gd
+godot --headless --path . --script res://tools/test_gameplay.gd
 ```
 
 On Windows, use `Start-Process -Wait` if your GUI Godot executable returns
@@ -195,7 +196,7 @@ pause/resume, round results, menu setup, and live 4/6/8-player matches.
 The league/series, crowd, trap/steal, ricochet and music integration suite is:
 
 ```powershell
-& "D:\GODOT\Godot_v4.3-stable_win64.exe" --headless --path . --script res://tools/test_leagues.gd
+godot --headless --path . --script res://tools/test_leagues.gd
 ```
 
 Audio is reproducible from `tools/generate_audio.py` and
@@ -208,14 +209,14 @@ The dedicated AI soak test proves that CPUs legally target and eliminate
 one another in a live match:
 
 ```powershell
-& "D:\GODOT\Godot_v4.3-stable_win64.exe" --headless --path . --script res://tools/test_free_for_all.gd
+godot --headless --path . --script res://tools/test_free_for_all.gd
 ```
 
 Player saves, creator controls, all ten home sprites, Bayou placement, and
 automatic tour travel (including loss, cancellation, and final-city cases):
 
 ```powershell
-& "D:\GODOT\Godot_v4.3-stable_win64.exe" --headless --path . --script res://tools/test_profiles_tour.gd
+godot --headless --path . --script res://tools/test_profiles_tour.gd
 ```
 
 The profile/tour suite uses isolated temporary saves, never the user's slots.
@@ -229,8 +230,8 @@ godot --headless --path . --script res://tools/test_controls_customization.gd
 godot --path . --script res://tools/capture_action_preview.gd
 ```
 
-Mappings follow Godot 4.3's [controller input guidance](https://docs.godotengine.org/en/4.3/tutorials/inputs/controllers_gamepads_joysticks.html);
-touch taps use [Input.parse_input_event](https://docs.godotengine.org/en/4.3/classes/class_input.html)
+Mappings follow Godot 4.7's [controller input guidance](https://docs.godotengine.org/en/4.7/tutorials/inputs/controllers_gamepads_joysticks.html);
+touch taps use [Input.parse_input_event](https://docs.godotengine.org/en/4.7/classes/class_input.html)
 so both press and release reach the buffered gameplay handler.
 These simulations do **not** replace physical PC gamepad and Android hardware
 testing. No Android APK/device certification is implied by desktop checks.
@@ -287,13 +288,16 @@ creates an offline arena mockup. The runtime preview above captures the actual g
 ## Android export
 
 `export_presets.cfg` includes a landscape Android preset for
-`com.appsbydan.gagapitshowdown`. Install matching Godot export templates,
-an Android SDK, and a JDK, then configure them in Godot's export settings.
-Keep signing credentials local. Export from the root project.
+`com.appsbydan.gagapitshowdown`. It produces an Android App Bundle, targets API
+36, uses version name `1.0.0` and version code `1`, and requests no sensitive
+Android permissions. Install the matching Godot 4.7.2 export templates and
+OpenJDK 17, then configure the Java and Android SDK paths in Godot's editor
+settings. Keep the release keystore and passwords outside the repository.
 
-## Still unfinished
+Before a store upload, set the release keystore, alias and password, export a
+release AAB, test the generated build on at least one physical Android device,
+and increment `version/code` for every later Play upload.
 
-Looping music, richer bosses, multi-round match scoring,
-out-of-bounds/ball height, and special curved shots remain future work.
-This pass restores the playable foundation; it does not implement those
-features or claim device-tested Android support.
+The app-specific [Privacy Policy](PRIVACY_POLICY.md) documents the current
+local-only save behavior and should be hosted at a public URL for the Play
+listing and the in-app privacy link.

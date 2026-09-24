@@ -113,7 +113,8 @@ func _ready() -> void:
 	name_title.text = "PLAYER NAME"
 	grid.add_child(name_title)
 	_name = LineEdit.new()
-	_name.max_length = 14
+	_name.max_length = 24
+	_name.placeholder_text = "Type any player name"
 	_name.custom_minimum_size = Vector2(370, 36)
 	_name.text_changed.connect(func(value: String) -> void:
 		_drafts[_slot]["name"] = value

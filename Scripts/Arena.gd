@@ -228,10 +228,10 @@ func _register_character(character: Character) -> void:
 	var tag := Label.new()
 	tag.name = "NameTag"
 	tag.text = character.display_name
-	tag.position = Vector2(-70, -108)
-	tag.size = Vector2(140, 18)
+	tag.position = Vector2(-100, -112)
+	tag.size = Vector2(200, 20)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_font_size_override("font_size", 10 if character.display_name.length() > 18 else 11)
 	tag.add_theme_constant_override("outline_size", 3)
 	tag.add_theme_color_override("font_color", Color("ffd777") if character is PlayerCharacter else Color.WHITE)
 	character.add_child(tag)
@@ -326,7 +326,9 @@ func _on_player_strike_blocked(_blocked_ball: GagaBall) -> void:
 	_play_sfx(&"double", -6.0)
 
 func _on_struck_ball(_struck: GagaBall, power: float) -> void:
-	_crowd.cheer(0.5)
+	# The audio layer rate-limits cheers, so every clean connection can ask for
+	# a reaction without turning a rapid rally into overlapping noise.
+	_crowd.cheer(0.5, true)
 	var direction := _struck.linear_velocity.normalized()
 	_spawn_impact(_struck.global_position, "slap", direction, power)
 	_play_sfx(&"power" if power > 0.55 else &"slap", -3.0)
@@ -352,7 +354,10 @@ func _eliminate(character: Character, hit_ball: GagaBall = null) -> void:
 	character.eliminate(impact_direction)
 	_alive.erase(character)
 	_finish_order.push_front(character.get_meta("club_id", character.display_name))
-	_crowd.cheer(1.2)
+	if character is PlayerCharacter:
+		_crowd.boo(1.25)
+	else:
+		_crowd.cheer(1.2, true)
 	var announcement := "%s IS OUT!" % character.display_name
 	if striker != null and striker != character:
 		announcement = "%s KNOCKED OUT %s!" % [striker.display_name, character.display_name]
@@ -416,22 +421,20 @@ func _end_round(player_won: bool) -> void:
 		var same_city := int(GameState.career().round) == int(GameState.match_config.stage_index)
 		if GameState.career().complete:
 			_overlay_title.text = "SEASON COMPLETE"
-			_overlay_note.text = GameState.standings_text(true) + "\n" + GameState.career().movement
+			_overlay_note.text = "FINAL SEASON TABLE\n" + GameState.standings_text(true) + "\n\n" + GameState.career().movement
 			_retry_button.text = "START NEXT SEASON"
 		elif same_city:
 			_overlay_title.text = "GAME %d COMPLETE" % (int(GameState.match_config.series_game) + 1)
-			_travel_summary = "CITY SERIES\n" + GameState.series_text()
+			_travel_summary = "CITY SERIES\n" + GameState.series_text() + "\n\nSEASON TABLE\n" + GameState.standings_text()
 			_overlay_note.text = _travel_summary
 			_next_stage = int(GameState.career().round)
-			_retry_button.text = "PLAY GAME %d" % (int(GameState.career().series.rounds) + 1)
-			_start_travel_timer()
+			_retry_button.text = "CONTINUE TO GAME %d" % (int(GameState.career().series.rounds) + 1)
 		else:
 			_overlay_title.text = "CITY SERIES COMPLETE"
-			_travel_summary = "CITY PODIUM · 3 / 2 / 1 POINTS\n" + GameState.series_text() + "\n\nLEAGUE TABLE\n" + GameState.standings_text()
+			_travel_summary = "CITY PODIUM · 3 / 2 / 1 POINTS\n" + GameState.series_text() + "\n\nSEASON TABLE\n" + GameState.standings_text()
 			_overlay_note.text = _travel_summary
 			_next_stage = int(GameState.career().round)
-			_retry_button.text = "NEXT CITY"
-			_start_travel_timer()
+			_retry_button.text = "CONTINUE TO NEXT CITY"
 		if GameState.last_save_error != OK:
 			_overlay_note.text += "\nSave failed; progress is in memory only."
 	elif player_won and int(GameState.match_config["stage_index"]) >= 0:
@@ -449,7 +452,10 @@ func _end_round(player_won: bool) -> void:
 			_overlay_title.text = "TOUR CHAMPION"
 			_overlay_note.text = "All ten cities conquered! Your hometown legend starts here."
 	_resume_button.visible = false
-	_crowd.cheer(3.0)
+	if player_won:
+		_crowd.cheer(3.0, true)
+	else:
+		_crowd.boo(2.5)
 	_overlay.show()
 	# Leave the pratfall visible before fading in the results card.
 	_overlay.modulate.a = 0.0
@@ -593,8 +599,8 @@ func _build_hud() -> void:
 	hud.add_child(pause_button)
 	_overlay = PanelContainer.new()
 	_overlay.theme = ui_theme
-	_overlay.position = Vector2(320, 125)
-	_overlay.size = Vector2(640, 470)
+	_overlay.position = Vector2(300, 72)
+	_overlay.size = Vector2(680, 570)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("121e2e")
 	style.border_color = Color("ffd777")
@@ -662,6 +668,16 @@ func _build_ground(points: PackedVector2Array) -> void:
 	backdrop.scale = Vector2(1280.0 / backdrop.texture.get_width(), 720.0 / backdrop.texture.get_height())
 	backdrop.z_index = -6
 	add_child(backdrop)
+	var ambience := preload("res://Scripts/StageAmbience.gd").new()
+	ambience.name = "StageAmbience"
+	ambience.z_index = -5
+	ambience.setup(GameState.city_id(), "background")
+	add_child(ambience)
+	var foreground_ambience := preload("res://Scripts/StageAmbience.gd").new()
+	foreground_ambience.name = "StageAmbienceFront"
+	foreground_ambience.z_index = 3
+	foreground_ambience.setup(GameState.city_id(), "foreground")
+	add_child(foreground_ambience)
 
 	var surround := Polygon2D.new()
 	surround.name = "Surround"

@@ -56,6 +56,17 @@ def slap(t, noise, power=False):
     spring = fm(t, 195 if power else 275, 2.6, 18) * math.exp(-17*t)
     return 0.48*thump + 0.60*clap + 0.22*spring
 
+def crowd_voice(t, noise, base=190, rise=0.0, rough=0.22):
+    """A small layered schoolyard crowd made only from synthesis."""
+    vowel = 0.0
+    for voice, detune in enumerate((0.91, 0.97, 1.03, 1.09, 1.16)):
+        frequency = (base + rise * t) * detune
+        phase = TAU * frequency * t
+        vowel += math.sin(phase + 0.55 * math.sin(phase * 2.01))
+        vowel += 0.32 * math.sin(phase * 2.0)
+    envelope = min(1.0, t / 0.035) * math.exp(-1.9 * t)
+    return (vowel / 6.6 + noise * rough) * envelope
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     write("ui", 0.12, lambda t,n: pluck(t, 880), 0.4)
@@ -71,7 +82,12 @@ def main():
     write("steal", 0.24, tune([784,988,1175],0.065), 0.55)
     write("toss", 0.45, lambda t,n: n*math.sin(math.pi*t/0.45)*0.65 + fm(t,240+t*550,0.7)*math.exp(-8*t)*0.25, 0.55)
     write("jump", 0.25, lambda t,n: fm(t,180+t*900,0.7)*math.exp(-12*t), 0.4)
-    print("13 original stereo 44.1 kHz / 16-bit arcade effects written to Assets/Audio")
+    write("crowd_cheer", 1.15, lambda t,n: crowd_voice(t,n,205,95,0.32) + 0.15*math.sin(TAU*4*t), 0.72, 0.075)
+    write("crowd_boo", 1.05, lambda t,n: crowd_voice(t,n,155,-28,0.38), 0.66, 0.09)
+    write("crowd_shout_a", 0.52, lambda t,n: crowd_voice(t,n,245,150,0.22), 0.62, 0.045)
+    write("crowd_shout_b", 0.64, lambda t,n: crowd_voice(t,n,185,70,0.28), 0.60, 0.055)
+    write("crowd_shout_c", 0.46, lambda t,n: crowd_voice(t,n,285,-80,0.24), 0.60, 0.04)
+    print("18 original stereo 44.1 kHz / 16-bit arcade effects written to Assets/Audio")
 
 if __name__ == "__main__":
     main()

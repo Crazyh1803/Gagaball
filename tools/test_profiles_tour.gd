@@ -38,6 +38,9 @@ func _run() -> void:
 	var clean := ART.normalize({"name": "  ", "hat": 90, "skin": -5, "jersey": "invalid"})
 	check(clean.name == "ROOKIE" and clean.hat == 3 and clean.skin == 0,
 		"Incomplete or out-of-range cosmetics are normalized")
+	var personal_name := ART.normalize({"name": "  DJ River-Kid  "})
+	check(personal_name.name == "DJ River-Kid",
+		"Player names preserve custom spelling, punctuation and casing")
 	var good_path: String = state.profiles_path
 	state.profiles_path = "user://missing-profile-test-folder/players.cfg"
 	check(state.save_player(0, ART.defaults("UNSAVED")) != OK

@@ -84,6 +84,9 @@ func run() -> void:
 	state.active_player_slot = 0
 	state.start_campaign_stage(8)
 	check(state.match_config.pit_center.y == 175 and state.match_config.pit_scale == 0.32, "Chicago court is anchored below the building")
+	state.start_friendly(6, 1, "baltimore")
+	check(state.match_config.pit_center == Vector2(0,115) and state.match_config.pit_scale == 0.36,
+		"An explicitly selected city cannot inherit another random venue's court geometry")
 	state.start_campaign_stage(5)
 	check(state.player_is_home(), "Home-city comparison assigns player to HOME in Baltimore")
 	var arena := (load("res://Scenes/GameArena.tscn") as PackedScene).instantiate()
@@ -92,8 +95,190 @@ func run() -> void:
 	var ball := arena.ball as GagaBall
 	var player := arena.get_node("Player") as PlayerCharacter
 	var opponent := arena._alive[1] as Character
-	check(arena._crowd.fans.size() == 12, "Twelve animated spectators exist outside the roster")
-	check(arena._crowd.fans[0].get_meta("player_supporter") and not arena._crowd.fans[6].get_meta("player_supporter"), "Home fans switch sides in the player's home city")
+	check(arena._crowd.fans.size() == 10, "Ten venue-placed animated spectators exist outside the roster")
+	check(arena._crowd.fans[0].get_meta("player_supporter") and not arena._crowd.fans[5].get_meta("player_supporter"), "Home fans switch sides in the player's home city")
+	var crowd_rows := {}
+	for fan in arena._crowd.fans.slice(0, 5): crowd_rows[roundi(fan.position.y)] = true
+	check(crowd_rows.size() == 5, "Supporters gather in irregular clumps instead of formation rows")
+	var venue_layers = preload("res://Scripts/VenueLayers.gd")
+	for city in state.all_cities():
+		var crowd_layer: Array = venue_layers.crowd(city.city_id)
+		var motion_layer: Array = venue_layers.motion(city.city_id)
+		check(venue_layers.CROWD.has(city.city_id) and crowd_layer[0].size() == 5
+			and crowd_layer[1].size() == 5,
+			"Venue has its own populated crowd layer: " + str(city.city_id))
+		var pit_center: Vector2 = city.get("pit_center", Vector2(0, 115))
+		var pit_vertical_scale: float = city.get("pit_scale", 0.36)
+		var pit_polygon := PackedVector2Array()
+		for point_index in 8:
+			var angle := TAU * (point_index + 0.5) / 8.0
+			var world_y := sin(angle) * 330.0
+			var width_scale := 1.0 + world_y / 330.0 * 0.13
+			pit_polygon.append(pit_center + Vector2(cos(angle) * 330.0 * width_scale,
+				world_y * pit_vertical_scale))
+		var crowd_clear := true
+		for side in crowd_layer:
+			for point in side:
+				crowd_clear = crowd_clear and not Geometry2D.is_point_in_polygon(Vector2(point), pit_polygon)
+		check(crowd_clear, "Every spectator's feet stay outside the playable pit: " + str(city.city_id))
+		check(venue_layers.MOTION.has(city.city_id) and motion_layer.size() >= 1
+			and motion_layer.all(func(spec): return spec.path.size() >= 2),
+			"Venue has approved background-movement paths: " + str(city.city_id))
+	for sprite_name in ["roadrunner-run-v3", "javelina-trot-v3", "blue-crab-scuttle-v3", "cyclist-pedal-v3",
+			"pigeon-flap-v3", "chicago-train-periodic-v3", "baltimore-oriole-flap-v1",
+			"boston-gull-flap-v1", "belair-cardinal-flap-v1", "berlin-sparrow-flap-v1",
+			"brasilia-toucan-flap-v1", "canberra-cockatoo-flap-v1",
+			"brasilia-capybara-walk-v1", "canberra-kangaroo-hop-v1",
+			"pedestrian-walk-v1", "rollerblader-glide-v1", "dogwalker-labrador-v1",
+			"dogwalker-dachshund-v1", "dogwalker-kelpie-v1", "houston-grackle-flap-v1",
+			"humboldt-raven-flap-v1", "maine-chickadee-flap-v1", "orlando-ibis-flap-v1",
+			"topeka-meadowlark-flap-v1", "tokyo-whiteeye-flap-v1",
+			"washington-eagle-flap-v1"]:
+		var texture := load("res://Assets/Ambience/%s.png" % sprite_name) as Texture2D
+		check(texture != null and texture.get_image().detect_alpha() != Image.ALPHA_NONE,
+			"Ambient pixel-art sprite imports with true transparency: " + sprite_name)
+	check(arena.has_node("StageAmbience") and arena.has_node("StageAmbienceFront")
+		and arena.get_node("StageAmbienceFront").actors.size() == 1,
+		"Baltimore promenade life is isolated on the foreground layer")
+	var labels_in_crowd := 0
+	for child in arena._crowd.get_children(): labels_in_crowd += 1 if child is Label else 0
+	check(labels_in_crowd == 0, "Crowd no longer carries HOME or AWAY text labels")
+	check(venue_layers.MOTION.values().all(func(layer):
+		return layer.all(func(actor): return actor.kind != "boat")),
+		"Moving sailboats are removed in favor of the superior painted boats")
+	var baltimore_crab: Dictionary = arena.get_node("StageAmbienceFront").actors[0]
+	check(baltimore_crab.kind in ["walker", "rollerblader", "dogwalker", "bicycle", "crab"]
+		and Vector2(baltimore_crab.path[0]) == Vector2(-184,301)
+		and Vector2(baltimore_crab.path[-1]) == Vector2(190,301),
+		"Baltimore ground rotation follows the new foreground brick-promenade route")
+	check(arena.get_node("StageAmbienceFront").z_index > 2,
+		"Tall Baltimore promenade actors render in front of the near pit wall")
+	check(arena._crowd.fans[9].position.x < 300.0,
+		"Baltimore's right foreground spectator stays clear of the railing")
+	check(arena._crowd.fans.any(func(fan): return fan.z_index > 2),
+		"Foreground spectators render in front of the near pit wall")
+	var crowd_painter_order := true
+	for first in arena._crowd.fans:
+		for second in arena._crowd.fans:
+			if first.position.y > second.position.y + 20.0:
+				crowd_painter_order = crowd_painter_order and first.z_index > second.z_index
+	check(crowd_painter_order,
+		"Crowd depth follows every spectator's feet instead of two broad rows")
+	var crowd_audio := root.get_node("RetroSfx")
+	arena._crowd.cheer(0.1, true)
+	arena._crowd.boo(0.1)
+	arena._crowd.random_shout()
+	var shout_played := false
+	for shout in [&"crowd_shout_a", &"crowd_shout_b", &"crowd_shout_c"]:
+		shout_played = shout_played or crowd_audio._last_played.has(shout)
+	check(crowd_audio._last_played.has(&"crowd_cheer")
+		and crowd_audio._last_played.has(&"crowd_boo") and shout_played,
+		"Cheer, boo and random shout events reach the audio mixer")
+	check(arena._crowd.ambient_shout_left <= 3.0,
+		"The first ambient shout happens early enough to hear in a short match")
+	var ambience_script = preload("res://Scripts/StageAmbience.gd")
+	var tokyo_ambience = ambience_script.new()
+	tokyo_ambience.setup("tokyo")
+	check(tokyo_ambience.actors.all(func(actor): return actor.kind in ["petals", "whiteeye"])
+		and Vector2(tokyo_ambience.actors[0].path[0]) == Vector2(-144,-287),
+		"Tokyo rotates sakura and a local white-eye on its annotated aerial route")
+	tokyo_ambience.free()
+	var orlando_ambience = ambience_script.new()
+	orlando_ambience.setup("orlando")
+	check(orlando_ambience.actors.all(func(actor): return actor.kind in ["bird", "ibis"])
+		and Vector2(orlando_ambience.actors[0].path[0]) == Vector2(-330,-242),
+		"Orlando uses its annotated skyline route and local ibis rotation")
+	orlando_ambience.free()
+	var orlando_crowd: Array = venue_layers.crowd("orlando")
+	check(orlando_crowd[0].all(func(point): return Vector2(point).x >= -490.0)
+		and orlando_crowd[1].all(func(point): return Vector2(point).x <= 490.0)
+		and orlando_crowd[0].all(func(point): return Vector2(point).y <= 165.0)
+		and orlando_crowd[1].all(func(point): return Vector2(point).y <= 165.0),
+		"Orlando spectators keep their full silhouettes clear of the foreground lamps")
+	var topeka_crowd: Array = venue_layers.crowd("topeka")
+	var washington_crowd: Array = venue_layers.crowd("washington")
+	check(Vector2(topeka_crowd[1][3]).x >= 420.0,
+		"Topeka's lower-right spectator stays outside the pit boundary")
+	check(Vector2(washington_crowd[1][3]).x >= 420.0,
+		"Washington's lower-right spectator stays outside the pit boundary")
+	var final_guide_routes := {
+		"wiesbaden":[Vector2(-97,-36),Vector2(152,-18)],
+		"phoenix":[Vector2(-162,-32),Vector2(209,-32)],
+		"taos":[Vector2(-376,-90),Vector2(455,-94)],
+		"tokyo":[Vector2(-144,-287),Vector2(194,-287)],
+		"topeka":[Vector2(-310,-280),Vector2(78,-280)],
+		"washington":[Vector2(282,-256),Vector2(596,-258)],
+	}
+	for city_id in final_guide_routes:
+		var route: Array = venue_layers.motion(city_id)[0].path
+		var expected: Array = final_guide_routes[city_id]
+		check(Vector2(route[0]) == expected[0] and Vector2(route[-1]) == expected[1],
+			"Final placement-guide motion corridor is exact: " + city_id)
+	check(venue_layers.motion("topeka")[0].choices.has("meadowlark")
+		and venue_layers.motion("tokyo")[0].choices.has("whiteeye")
+		and venue_layers.motion("washington")[0].choices.has("eagle"),
+		"Final aerial venues rotate locally recognizable birds")
+	var berlin_ambience = ambience_script.new()
+	berlin_ambience.setup("berlin")
+	var berlin_bike: Dictionary = berlin_ambience.actors[0]
+	check(berlin_ambience.actors.size() == 1
+		and berlin_bike.kind in ["walker", "rollerblader", "dogwalker_dachshund", "bicycle"]
+		and Vector2(berlin_bike.path[0]) == Vector2(-219,-35)
+		and Vector2(berlin_bike.path[-1]) == Vector2(270,-35),
+		"Berlin ground rotation, including its dachshund, stays on the annotated courtyard route")
+	berlin_ambience.free()
+	var belair_motion: Array = venue_layers.motion("belair")
+	check(belair_motion[0].choices == ["bird", "cardinal"]
+		and belair_motion[1].choices.has("rollerblader")
+		and Vector2(belair_motion[0].path[0]) == Vector2(-303,-230)
+		and Vector2(belair_motion[1].path[0]) == Vector2(-284,-25),
+		"Bel Air separates annotated aerial and ground corridors")
+	var boston_motion: Array = venue_layers.motion("boston")
+	check(boston_motion.all(func(actor): return actor.choices == ["bird", "gull"])
+		and Vector2(boston_motion[0].path[0]).y == -318,
+		"Boston movement remains inside its annotated aerial corridor")
+	var boston_crowd: Array = venue_layers.crowd("boston")
+	check(Vector2(boston_crowd[0][-1]).x == -375
+		and Vector2(boston_crowd[1][-1]).x == 375,
+		"Boston's foreground spectators stay clear of the stone pillars")
+	var brasilia_motion: Array = venue_layers.motion("brasilia")
+	check(brasilia_motion.size() == 1 and brasilia_motion[0].choices.has("capybara")
+		and brasilia_motion[0].choices.has("dogwalker")
+		and Vector2(brasilia_motion[0].path[0]) == Vector2(-276,-18),
+		"Brasília uses only its annotated ground corridor")
+	var canberra_motion: Array = venue_layers.motion("canberra")
+	check(canberra_motion[0].choices == ["bird", "cockatoo"]
+		and canberra_motion[1].choices.has("dogwalker_kelpie")
+		and canberra_motion[1].choices.has("kangaroo")
+		and Vector2(canberra_motion[0].path[0]) == Vector2(-72,-315)
+		and Vector2(canberra_motion[1].path[0]) == Vector2(-247,-50),
+		"Canberra separates annotated aerial and ground corridors")
+	var annapolis_ambience = ambience_script.new()
+	annapolis_ambience.setup("annapolis")
+	check(annapolis_ambience.actors[0].kind in ["bird", "oriole"]
+		and Vector2(annapolis_ambience.actors[0].path[0]).x == -235.0
+		and annapolis_ambience.actors[1].kind in ["walker", "rollerblader", "dogwalker", "bicycle"]
+		and Vector2(annapolis_ambience.actors[1].path[0]).y == -67.0,
+		"Annapolis follows the annotated bird and ground-movement corridors")
+	annapolis_ambience.free()
+	var chicago_ambience = ambience_script.new()
+	chicago_ambience.setup("chicago")
+	var chicago_train: Dictionary = chicago_ambience.actors[0]
+	check(chicago_train.kind == "train" and chicago_train.periodic
+		and not chicago_train.active and chicago_train.wait_min >= 15.0,
+		"Chicago train makes periodic passes instead of looping constantly")
+	check(chicago_train.path.size() >= 5
+		and float(chicago_train.start_size) > float(chicago_train.end_size),
+		"Chicago train follows the rail perspective and shrinks toward the vanishing point")
+	chicago_train.active = true
+	chicago_train.travel = float(chicago_train.path_length) * 0.5
+	chicago_ambience.actors[0] = chicago_train
+	chicago_ambience._process(0.0)
+	chicago_train = chicago_ambience.actors[0]
+	check(float(chicago_train.render_size) < float(chicago_train.start_size)
+		and float(chicago_train.render_size) > float(chicago_train.end_size),
+		"Chicago train interpolates its rendered size during a pass")
+	chicago_ambience.free()
 	check(arena._alive.size() == 4, "Supporters and opening host cannot become combatants")
 	check(ball.freeze and ball.get_node("BallSprite").position.y == -55, "Home representative holds ball above ground")
 	await create_timer(1.95).timeout
@@ -156,6 +341,12 @@ func run() -> void:
 		"Sound effects use a subtle room bus for depth")
 	check(AudioServer.get_bus_index(&"MUSIC") >= 0 and AudioServer.get_bus_effect_count(AudioServer.get_bus_index(&"MUSIC")) > 0,
 		"Music has a dedicated stereo widening bus")
+	for crowd_sound in ["crowd_cheer", "crowd_boo", "crowd_shout_a", "crowd_shout_b", "crowd_shout_c"]:
+		check(ResourceLoader.exists("res://Assets/Audio/%s.wav" % crowd_sound),
+			"Crowd reaction imports: %s" % crowd_sound)
+	check(ResourceLoader.exists("res://Assets/Icon/gaga-pit-icon-1024.png")
+		and ResourceLoader.exists("res://Assets/Icon/gaga-pit-icon-512.png"),
+		"Octagonal Gaga pit app-store icon masters import")
 	var rotations := {}
 	for city in state.all_cities(): rotations[posmod(str(city.city_id).hash(), 5)] = true
 	check(rotations.size() == 5, "The city list rotates across all five music tracks")
@@ -172,7 +363,11 @@ func run() -> void:
 		if league._alive.size() > 1: league._eliminate(fighter)
 	check(league._round_over and league._league_recorded and state.career().round == 0 and state.career().series.rounds == 1,
 		"Game 1 records six actual finish positions without leaving the city")
-	check(league._next_stage == 0 and league._retry_button.text == "PLAY GAME 2", "Game 1 continues to Game 2 in the same city")
+	check(league._next_stage == 0 and league._retry_button.text == "CONTINUE TO GAME 2"
+		and not is_instance_valid(league._tour_timer),
+		"Game 1 pauses on the tables until Continue starts Game 2")
+	check("SEASON TABLE" in league._overlay_note.text,
+		"Between-game pause displays the complete season table")
 	var sum_points := 0
 	for club in SEASON.table(state.career(),0): sum_points += club.points
 	check(sum_points == 0, "No league points are awarded before a city series ends")
@@ -185,7 +380,9 @@ func run() -> void:
 	for fighter in game_two._alive.duplicate():
 		if game_two._alive.size() > 1: game_two._eliminate(fighter)
 	check(state.career().round == 1 and state.career().series.rounds == 0, "Two wins clinch the best-of-three and advance cities")
-	check(game_two._next_stage == 1 and game_two._retry_button.text == "NEXT CITY", "Clinched series offers the next city")
+	check(game_two._next_stage == 1 and game_two._retry_button.text == "CONTINUE TO NEXT CITY"
+		and not is_instance_valid(game_two._tour_timer),
+		"Clinched series pauses on the season table before the next city")
 	sum_points = 0
 	for club in SEASON.table(state.career(),0): sum_points += club.points
 	check(sum_points == 6, "Clinched series distributes exactly 3 + 2 + 1 points")

@@ -1,4 +1,4 @@
-class_name VirtualJoystick
+class_name GagaVirtualJoystick
 extends Control
 ## Floating touch joystick occupying the left half of the screen (per PRD).
 ## It presses the same move_* input actions the keyboard uses, so

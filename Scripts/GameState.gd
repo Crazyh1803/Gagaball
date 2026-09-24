@@ -67,7 +67,7 @@ const CAMPAIGN_STAGES := [
 		"wall_color": "70413c", "court_tint": "8b6d68"},
 	{"name": "Metro Tech", "location": "Chicago, IL",
 		"cpus": [2, 2, 2], "drop_speed": 440.0, "ball_damp": 0.12,
-		"floor": "steel", "surround": "industrial", "backdrop": "backdrop_chicago",
+		"floor": "steel", "surround": "industrial", "backdrop": "backdrop_chicago_track",
 		"wall_color": "737b88", "court_tint": "6d788a",
 		"pit_center": Vector2(0, 175), "pit_scale": 0.32},
 	{"name": "National Championship Pit", "location": "Orlando, FL",
@@ -164,7 +164,11 @@ func start_friendly(player_count: int, difficulty: int, selected_city := "") -> 
 		var chosen := CATALOG.find_city(selected_city, CAMPAIGN_STAGES)
 		match_config.merge(chosen, true)
 		match_config.merge({"stage_index": -1, "stage_name": "%s — %s" % [chosen.name, chosen.location],
-			"cpus": cpus, "drop_speed": 340.0, "double_ball": false}, true)
+			"cpus": cpus, "drop_speed": 340.0, "double_ball": false,
+			# Never inherit the randomly sampled quick-play venue's geometry when
+			# capture tools or players explicitly select a city.
+			"pit_center": chosen.get("pit_center", Vector2(0, 115)),
+			"pit_scale": chosen.get("pit_scale", 0.36)}, true)
 
 ## Called by the arena when the round is decided. Campaign wins unlock the
 ## next stage; friendly matches just pass through.

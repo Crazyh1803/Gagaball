@@ -15,6 +15,11 @@ const PATHS := {
 	&"out": "res://Assets/Audio/out.wav",
 	&"double": "res://Assets/Audio/double.wav",
 	&"victory": "res://Assets/Audio/victory.wav",
+	&"crowd_cheer": "res://Assets/Audio/crowd_cheer.wav",
+	&"crowd_boo": "res://Assets/Audio/crowd_boo.wav",
+	&"crowd_shout_a": "res://Assets/Audio/crowd_shout_a.wav",
+	&"crowd_shout_b": "res://Assets/Audio/crowd_shout_b.wav",
+	&"crowd_shout_c": "res://Assets/Audio/crowd_shout_c.wav",
 }
 const MUSIC_PATHS := [
 	"res://Assets/Audio/Music/schoolyard_sprint.wav",

@@ -10,6 +10,7 @@ func _capture() -> void:
 	var arena_mode := args.has("--arena")
 	var stage_index := -1
 	var custom_id := ""
+	var forced_ambience_kind := ""
 	var state := root.get_node("GameState")
 	for arg in args:
 		if arg.begins_with("--stage="):
@@ -18,6 +19,8 @@ func _capture() -> void:
 			custom_id = arg.trim_prefix("--city=")
 			state.start_friendly(6, 1, custom_id)
 			arena_mode = true
+		if arg.begins_with("--ambience-kind="):
+			forced_ambience_kind = arg.trim_prefix("--ambience-kind=")
 		if arg.begins_with("--league="):
 			var division := int(arg.trim_prefix("--league="))
 			state.careers[state.active_player_slot] = state.SEASON.create(division, state.current_player())
@@ -42,6 +45,37 @@ func _capture() -> void:
 		scene = load("res://Scenes/PlayerCreator.tscn") as PackedScene
 	var instance := scene.instantiate()
 	root.add_child(instance)
+	if args.has("--regional") and arena_mode:
+		var regional_specs: Array = preload("res://Scripts/VenueLayers.gd").motion(state.city_id())
+		for layer_name in ["StageAmbience", "StageAmbienceFront"]:
+			var regional_ambience = instance.get_node(layer_name)
+			var front: bool = layer_name == "StageAmbienceFront"
+			var layer_specs: Array = regional_specs.filter(func(spec):
+				return bool(spec.get("foreground", false)) == front)
+			for i in mini(regional_ambience.actors.size(), layer_specs.size()):
+				var choices: Array = layer_specs[i].get("choices", [])
+				if forced_ambience_kind != "" and forced_ambience_kind in choices:
+					regional_ambience.actors[i].kind = forced_ambience_kind
+				elif not choices.is_empty():
+					regional_ambience.actors[i].kind = choices.back()
+	if args.has("--show-periodic") and arena_mode:
+		var ambience = instance.get_node("StageAmbience")
+		for i in ambience.actors.size():
+			var actor: Dictionary = ambience.actors[i]
+			if actor.get("periodic", false):
+				actor.active = true
+				actor.travel = float(actor.path_length) * 0.38
+				ambience.actors[i] = actor
+		ambience._process(0.0)
+	if args.has("--placement-guide") and arena_mode:
+		for fighter in instance._alive:
+			fighter.visible = false
+		instance.ball.visible = false
+		instance._crowd.visible = false
+		instance._home_rep.visible = false
+		instance.get_node("StageAmbience").visible = false
+		instance.get_node("StageAmbienceFront").visible = false
+		instance.get_node("HUD").visible = false
 	if args.has("--outfit"):
 		instance._show_tab(1)
 	if args.has("--sample-look"):
@@ -71,6 +105,10 @@ func _capture() -> void:
 	if stage_index >= 0:
 		path = "res://.godot/preview-stage-%02d.png" % stage_index
 	if custom_id != "": path = "res://.godot/preview-%s%s.png" % [custom_id, "-table" if args.has("--campaign") else ""]
+	if args.has("--placement-guide") and custom_id != "":
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://.godot/venue-guides"))
+		var guide_suffix := "-v2" if args.has("--guide-v2") else ""
+		path = "res://.godot/venue-guides/%s-placement-guide%s.png" % [custom_id, guide_suffix]
 	if args.has("--creator"):
 		path = "res://.godot/preview-creator.png"
 		if args.has("--outfit"):

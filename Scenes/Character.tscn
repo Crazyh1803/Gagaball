@@ -21,7 +21,7 @@ script = ExtResource("1_char")
 [node name="Sprite" type="Sprite2D" parent="."]
 texture_filter = 1
 position = Vector2(0, -46)
-scale = Vector2(1, 1)
+scale = Vector2(1.08, 1.08)
 texture = ExtResource("2_sheet")
 hframes = 8
 vframes = 3
