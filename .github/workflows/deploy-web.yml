@@ -1,0 +1,65 @@
+name: Deploy Web game to GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/gaga-pit-physics-movement-ry4pqo
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Check out the game
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 \
+            -o /tmp/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          curl -L --fail --retry 3 \
+            -o /tmp/templates.tpz \
+            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          unzip -q /tmp/templates.tpz -d /tmp/godot-templates
+          chmod +x /tmp/godot/Godot_v4.7.2-stable_linux.x86_64
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          cp -R /tmp/godot-templates/templates/. \
+            "$HOME/.local/share/godot/export_templates/4.7.2.stable/"
+
+      - name: Export the Web build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/web
+          /tmp/godot/Godot_v4.7.2-stable_linux.x86_64 \
+            --headless --path . --export-release Web build/web/index.html
+          touch build/web/.nojekyll
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the Web build
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

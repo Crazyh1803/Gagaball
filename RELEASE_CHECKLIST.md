@@ -32,6 +32,12 @@
   submission.
 - Complete Play Console declarations: ads, Data safety, target audience and
   content, content rating, app access, and Play App Signing.
+- For every bundle exported with the official Godot 4.7.2 release template,
+  upload `Godot_native_debug_symbols.4.7.2.stable.template_release.android.zip`
+  as its **Native debug symbols** archive in Play Console. Keep symbol archives
+  matched to the exact Godot version used for each release.
+- The current Android build does not enable R8/ProGuard, so it intentionally has
+  no deobfuscation mapping file. Do not upload a blank or unrelated mapping file.
 - Add the required contact email, store description, screenshots, app icon, and
   feature graphic. Ensure every store image reflects the actual current build.
 

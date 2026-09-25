@@ -67,7 +67,7 @@ var _next_stage := -1
 var _countdown_timer: Timer
 var _message_timer: Timer
 var _countdown_left := 3
-var touch_controls := OS.has_feature("mobile") or OS.get_cmdline_user_args().has("--touch")
+var touch_controls := OS.has_feature("mobile") or DisplayServer.is_touchscreen_available() or OS.get_cmdline_user_args().has("--touch")
 var _help: Label
 var _crowd: Node2D
 var _home_rep: Sprite2D

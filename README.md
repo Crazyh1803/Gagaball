@@ -16,6 +16,37 @@ is required for the current Google Play target API. The Compatibility renderer
 is used for broader desktop/mobile support; avoid mixing editor versions and
 import caches.
 
+## Web build and GitHub Pages
+
+The `Web` export preset produces a no-threads, landscape PWA in `build/web`.
+It runs on desktop browsers and mobile Safari without requiring custom
+cross-origin server headers. Touch-capable browsers automatically receive the
+same virtual stick and action buttons as the Android build, and the player-name
+field enables the browser's virtual keyboard.
+
+Export locally with Godot 4.7.2:
+
+```powershell
+& "D:\GODOT\4.7.2\Godot_v4.7.2-stable_win64_console.exe" `
+  --headless --path . --export-release Web build/web/index.html
+python -m http.server 8765 --directory build/web
+```
+
+Then open `http://127.0.0.1:8765/`. Do not open `index.html` directly from the
+filesystem; WebAssembly must be served over HTTP or HTTPS.
+
+`.github/workflows/deploy-web.yml` builds and deploys the game with the exact
+official Godot 4.7.2 editor and templates. In GitHub, select **Settings > Pages**
+and set **Source** to **GitHub Actions**, then run **Deploy Web game to GitHub
+Pages** from the Actions tab. The expected project URL is
+`https://crazyh1803.github.io/Gagaball/`. GitHub Pages for a private repository
+requires a GitHub plan that supports private Pages; otherwise the repository (or
+a separate deployment repository containing the static build) must be public.
+
+The generated `build/` directory is intentionally ignored. The workflow deploys
+it as a Pages artifact, so the WebAssembly and pack files do not need to be
+committed to Git.
+
 If Godot reports repeated **Safe save failed** messages while importing, close
 every editor and running game for this project, remove the root `.godot`
 directory, and reopen the project in one Godot version. `.godot` is ignored by
